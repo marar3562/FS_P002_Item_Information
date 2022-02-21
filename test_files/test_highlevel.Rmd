@@ -1,0 +1,146 @@
+---
+title: "Test Google Drive Connection"
+output: html_notebook
+---
+
+## Load Libraries
+
+```{r}
+library(googlesheets4)
+library(tidyverse)
+library(DT)
+```
+## Google Authentification
+
+```{r}
+gs4_auth(email = "")
+```
+## Pull in Raw data
+
+My Drive -> Rob_M -> Food_List_w_Inv -> Archive -> ARCHIVE_Food_List_2021_S14
+
+```{r}
+#Farmer Produce tab
+fp = range_read("1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+                ,sheet = 'farm_produce'
+                ,skip = 1
+                ,col_types = 'icccnnnnncD'
+                )
+
+#Master Item List tab
+mil = range_read("1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+                ,sheet = 'master_item_list'
+                ,col_types = 'cccccccnccD'
+                )
+
+#Farmer List tab
+# fl = range_read("1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+#                 ,sheet = 'farmer_list'
+#                 ,col_types = 'cccccD'
+#                 )
+
+#Share Rotation tab
+sr = range_read("1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+                ,sheet = 'share_rotation'
+                ,col_types = '----Dicic----------'
+                )
+
+```
+
+## Recent data
+
+```{r}
+fp_max = fp %>%
+  summarise(max = max(`Archive Date`)) %>%
+  pull
+
+mil_max = mil %>%
+  summarise(max = max(`Snapshot Date`)) %>%
+  pull
+
+# fl_max = fl %>% 
+#   summarise(max = max(`Snapshot Date`)) %>% 
+#   pull
+# 
+# stopifnot(fp_max == mil_max & fp_max == fl_max) #making sure all same date
+# 
+milc = mil %>% filter(`Snapshot Date` == fp_max)
+
+# flc = fl %>% filter(`Snapshot Date` == fp_max)
+
+```
+
+
+```{r}
+fp %>% head()
+milc %>% head()
+# flc %>% head()
+sr %>% head()
+```
+
+## Transform Data
+
+```{r}
+test_pivot = fp %>% 
+  filter(!is.na(av_min) | !is.na(av_max)) %>% 
+  group_by(Farm, Item) %>% 
+  summarise(min_avail = sum(av_min)
+            , max_avail = sum(av_max)
+            ) %>% 
+  mutate(availability = ifelse(is.na(max_avail), min_avail, max_avail)) %>% 
+  ungroup() %>% 
+  select(-min_avail, -max_avail) %>% 
+  pivot_wider(names_from = Farm, values_from = availability) %>% 
+  arrange(Item)
+
+datatable(test_pivot %>% replace(is.na(.), 0)) %>% formatStyle(
+  'Babbs',
+  backgroundColor = styleEqual(c(0, 400), c('gray', 'yellow'))
+)
+
+```
+
+## Time Series Chart
+
+```{r}
+test_timeseries = sr %>% #obtain full week list
+  rename(Week = 'Week #') %>% 
+  filter(Date <= fp_max & Group_Id != "skip") %>% 
+  select(Week, Date) %>% 
+  distinct() %>% 
+  full_join(fp %>% #cross join weeks with full Item list
+               filter(!is.na(av_min) | !is.na(av_max)) %>% 
+               select(Item) %>% 
+               distinct() %>% 
+               left_join(milc %>% #adding in Per value by Item
+                           select(Item,Per = Preferred_Per_Value) %>% 
+                           distinct()
+                         , by = c('Item')
+                         ) %>% 
+               arrange(Item, Per)
+             , by = character()) %>% 
+  left_join(fp %>% #bring in availability for each Item
+              filter(!is.na(av_min) | !is.na(av_max)) %>% 
+              group_by(Item, Week) %>% 
+              summarise(min_avail = sum(av_min)
+                        , max_avail = sum(av_max)
+                        ) %>%
+              mutate(availability = ifelse(is.na(max_avail), min_avail, max_avail)) %>% 
+              ungroup()
+            , by = c('Week','Item')) %>% 
+  select(-min_avail, -max_avail) %>% 
+  mutate(availability = ifelse(is.na(availability), 0, availability)) #fill in NAs with 0
+
+test_timeseries %>% 
+  filter(Item %in% c('Lettuce - Mix','Squash - Spaghetti - Medium')) %>% 
+  ggplot(aes(x=Date, y=availability)) +
+  geom_point() +
+  geom_line() +
+  facet_grid(Item + Per~.)
+  
+```
+
+```{r}
+names(fp)
+```
+
