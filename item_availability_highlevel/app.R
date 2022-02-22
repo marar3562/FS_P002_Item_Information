@@ -110,7 +110,8 @@ ui <- fluidPage(
         sidebarPanel(
           dateRangeInput("daterange","Date Range",fp_min, fp_max),     #date range
           selectInput("item","Item",item_list$Item, multiple = TRUE),  #item list
-          actionButton("update", "Update Table")                       #may want to replace with Submit button
+          # actionButton("update", "Update Table")                       #may want to replace with Submit button
+          submitButton("Update View", icon("refresh"))
         ),
 
         # Show a plot of the generated distribution
@@ -133,63 +134,77 @@ server <- function(input, output) {
   #putting initial data in dataframe variables
   values$df <- fp_pivot_table
   values_orig$df <- fp_pivot_table
-  timeseries$df <- ts_init
-  timeseries_final$df <- data.frame(Item = NA, Per = NA, Date = NA, availability = NA)
-
-  #update data sets based on filters, once user clicks button
-  newEntry <- observe({
-    if(input$update > 0) {
-      isolate(values$df <- values_orig$df %>% 
-                filter(Item %in% input$item & Date >= format(input$daterange[1]) & Date <= format(input$daterange[2])) 
-              )
-    }
-    if(input$update > 0 & !is.na(input$item)) {
-      isolate(timeseries_final$df <- timeseries$df %>% 
-                filter(Item %in% input$item)
-      )
-    }
-    if(input$update > 0 & !is.na(timeseries_final$df %>% select(Item) %>% pull())) {
-      isolate(timeseries_final$df <- timeseries_final$df %>% 
-                filter(Date >= format(input$daterange[1]) & Date <= format(input$daterange[2]))
-              )
-    }
-  })
+  timeseries$df <- data.frame(Item = NA, Per = NA, Date = as.Date('1900-01-01'), availability = NA)
+  timeseries_final$df <- ts_init
   
   #farmer availability pivot table
   output$farmer_item_table <- renderDataTable({
-    dat <- datatable(values$df %>% 
-                       group_by(Farm, Item) %>% 
-                       summarise(availability = sum(availability)) %>% 
-                       ungroup() %>% 
-                       pivot_wider(names_from = Farm, values_from = availability) %>% 
-                       arrange(Item) %>% 
-                       replace(is.na(.), 0)
+    if (is.null(input$item)) { #If Item is missing in filter still filter on date range
+      df <- values_orig$df %>%
+        filter(Date >= format(input$daterange[1]) & Date <= format(input$daterange[2])) %>% 
+        group_by(Farm, Item) %>% 
+        summarise(availability = sum(availability)) %>% 
+        ungroup() %>% 
+        pivot_wider(names_from = Farm, values_from = availability) %>% 
+        arrange(Item) %>% 
+        replace(is.na(.), 0)
+      dat <- datatable(df
                        , rownames = FALSE                      #remove row numbers
                        , class = 'cell-border stripe'          #add lines between rows/columns
                        , options = list(dom = 'litip')) %>%    #DT dropdown / filter / entry count settings
       formatStyle(
-        names(values$df %>%
-                group_by(Farm, Item) %>% 
-                summarise(availability = sum(availability)) %>% 
-                ungroup() %>% 
-                pivot_wider(names_from = Farm, values_from = availability) %>%
-                select(-Item))
+        names(df)
         , backgroundColor = styleInterval(c(1), c('azure2', 'seagreen'))   #updating color background of each cell
         , color = styleInterval(c(1), c('black', 'white'))                 #updating text color of each cell
         , textAlign = 'center'
         
         
       )
+    } else {  #If Item is present in filter then use both date range and item filter
+      df <- values_orig$df %>%
+        filter(Item %in% input$item & Date >= format(input$daterange[1]) & Date <= format(input$daterange[2])) %>% 
+        group_by(Farm, Item) %>% 
+        summarise(availability = sum(availability)) %>% 
+        ungroup() %>% 
+        pivot_wider(names_from = Farm, values_from = availability) %>% 
+        arrange(Item) %>% 
+        replace(is.na(.), 0)
+      dat <- datatable(df
+                       , rownames = FALSE                      #remove row numbers
+                       , class = 'cell-border stripe'          #add lines between rows/columns
+                       , options = list(dom = 'litip')) %>%    #DT dropdown / filter / entry count settings
+        formatStyle(
+          names(df)
+          , backgroundColor = styleInterval(c(1), c('azure2', 'seagreen'))   #updating color background of each cell
+          , color = styleInterval(c(1), c('black', 'white'))                 #updating text color of each cell
+          , textAlign = 'center'
+          
+          
+        )
+    }
+    
     return(dat)
     })
   
   #item availability time series plots
   output$item_timeseries <- renderPlot({
-    timeseries_final$df %>% 
-      ggplot(aes(x=Date, y=availability)) +
-      geom_point(color = c('seagreen')) +
-      geom_line(color = c('seagreen')) +
-      facet_grid(Item + Per~.)
+    
+    if(is.null(input$item)) {  #Plot will only show valid data if an Item is selected.
+      ts <- timeseries$df %>% 
+        ggplot(aes(x=Date, y=availability)) +
+        geom_point(color = c('seagreen')) +
+        geom_line(color = c('seagreen')) +
+        facet_grid(Item + Per~.)
+    } else {              
+      ts <- timeseries_final$df %>% 
+        filter(Item %in% input$item & Date >= format(input$daterange[1]) & Date <= format(input$daterange[2])) %>% 
+        ggplot(aes(x=Date, y=availability)) +
+        geom_point(color = c('seagreen')) +
+        geom_line(color = c('seagreen')) +
+        facet_grid(Item + Per~.)
+    } 
+    
+    return(ts)
   })
 }
 

@@ -1,0 +1,79 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## Load Libraries
+
+```{r}
+library(googlesheets4)
+library(tidyverse)
+library(DT)
+```
+## Google Authentification
+
+```{r}
+gs4_auth(email = "")
+```
+## Pull in Raw data
+
+My Drive -> Rob_M -> Food_List_w_Inv -> Archive -> ARCHIVE_Food_List_2021_S14
+
+```{r}
+#Farmer Produce tab
+fp = range_read("1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+                ,sheet = 'farm_produce'
+                ,skip = 1
+                ,col_types = 'icccnnnnncD'
+                )
+
+#Master Item List tab
+mil = range_read("1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+                ,sheet = 'master_item_list'
+                ,col_types = 'cccccccnccD'
+                )
+
+#Farmer List tab
+# fl = range_read("1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+#                 ,sheet = 'farmer_list'
+#                 ,col_types = 'cccccD'
+#                 )
+
+#Share Rotation tab
+sr = range_read("1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+                ,sheet = 'share_rotation'
+                ,col_types = '----Dicic----------'
+                )
+
+```
+
+## Recent data
+
+```{r}
+fp_max = fp %>%
+  summarise(max = max(`Archive Date`)) %>%
+  pull
+
+mil_max = mil %>%
+  summarise(max = max(`Snapshot Date`)) %>%
+  pull
+
+# fl_max = fl %>% 
+#   summarise(max = max(`Snapshot Date`)) %>% 
+#   pull
+# 
+# stopifnot(fp_max == mil_max & fp_max == fl_max) #making sure all same date
+# 
+milc = mil %>% filter(`Snapshot Date` == fp_max)
+
+# flc = fl %>% filter(`Snapshot Date` == fp_max)
+
+```
+
+
+```{r}
+fp %>% head()
+milc %>% head()
+# flc %>% head()
+sr %>% head()
+```

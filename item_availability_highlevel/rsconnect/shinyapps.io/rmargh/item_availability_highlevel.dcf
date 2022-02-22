@@ -5,9 +5,9 @@ account: rmargh
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 5703709
-bundleId: 5603657
+bundleId: 5606439
 url: https://rmargh.shinyapps.io/item_availability_highlevel/
-when: 1645482809.26461
-lastSyncTime: 1645482809.26461
+when: 1645552589.08594
+lastSyncTime: 1645552589.08594
 asMultiple: FALSE
 asStatic: FALSE
