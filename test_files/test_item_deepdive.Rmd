@@ -9,6 +9,7 @@ output: html_notebook
 library(googlesheets4)
 library(tidyverse)
 library(DT)
+library(scales)
 ```
 ## Google Authentification
 
@@ -19,32 +20,44 @@ gs4_auth(email = "")
 
 My Drive -> Rob_M -> Food_List_w_Inv -> Archive -> ARCHIVE_Food_List_2021_S14
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 #Farmer Produce tab
-fp = range_read("1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+sheet_id = "1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+fp = range_read(sheet_id
                 ,sheet = 'farm_produce'
                 ,skip = 1
                 ,col_types = 'icccnnnnncD'
                 )
 
 #Master Item List tab
-mil = range_read("1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+mil = range_read(sheet_id
                 ,sheet = 'master_item_list'
                 ,col_types = 'cccccccnccD'
                 )
 
-#Farmer List tab
-# fl = range_read("1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
-#                 ,sheet = 'farmer_list'
-#                 ,col_types = 'cccccD'
-#                 )
-
 #Share Rotation tab
-sr = range_read("1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+sr = range_read(sheet_id
                 ,sheet = 'share_rotation'
                 ,col_types = '----Dicic----------'
                 )
 
+#Weekly Share Lists tab
+wsl = range_read(sheet_id
+                ,sheet = 'weekly_share_lists'
+                ,col_types = 'iccicin--D'
+                )
+
+#Share Numbers tab
+sn = range_read(sheet_id
+                ,sheet = 'share_numbers'
+                ,col_types = 'icccicD-'
+                )
+
+#Inventory Sales tab
+is = range_read(sheet_id
+                ,sheet = 'inv_sales'
+                ,col_types = 'iccnnccD--'
+                )
 ```
 
 ## Recent data
@@ -76,4 +89,148 @@ fp %>% head()
 milc %>% head()
 # flc %>% head()
 sr %>% head()
+wsl %>% head()
+sn %>% head()
 ```
+
+## Item Summary Information
+
+```{r}
+item_summary <- milc %>% 
+  filter(Category %in% c('Produce - Vegetables','Produce - Fruits')) %>% 
+  filter(Item == 'Kale - Green Curly') %>% 
+  select(Item, Category, Per = Preferred_Per_Value, Note = `Farmer Dashboard Notes`) %>% 
+  mutate(n = row_number(),
+         Note = ifelse(is.na(Note), 'FILL ME IN PLEASE!!!', Note)) %>%
+  left_join(fp %>% 
+              mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
+              filter(!is.na(availability) & !is.na(Cost)) %>% 
+              group_by(Item) %>% 
+              summarise('Average Cost' = mean(Cost)
+                        ,'75th % Cost' = quantile(Cost, 0.75)
+                        ,'50th % Cost' = median(Cost)
+                        ,'25th % Cost' = quantile(Cost, 0.25)
+                        ) %>% 
+              ungroup() %>% 
+              mutate_at(vars(-Item), funs(. %>% round(2) %>% scales::dollar()))
+            , by = c('Item')) %>% 
+  pivot_longer(!n, names_to = "names", values_to ="variables") %>% 
+  select(-n) %>% 
+  
+  replace(is.na(.), '')
+
+item_summary
+
+```
+
+## Price Histogram
+
+```{r}
+# fp %>% 
+#   mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
+#   filter(!is.na(availability) & !is.na(Cost)) %>% 
+#   filter(Item == 'Peppers - Colored Bell') %>% 
+#   ggplot(aes(x=Cost)) +
+#     geom_histogram()
+
+fp %>% 
+  mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
+  filter(!is.na(availability) & !is.na(Cost)) %>% 
+  filter(Item == 'Peppers - Colored Bell') %>%
+  group_by(Item, Cost) %>% 
+  summarise(Count = n()) %>% 
+  arrange(Item, desc(Cost)) %>% 
+  ungroup() %>% 
+  left_join(fp %>% 
+              mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
+              filter(Item == 'Peppers - Colored Bell') %>%
+              filter(!is.na(availability) & !is.na(Cost)) %>% 
+              group_by(Item) %>% 
+              summarise(ttl_count = n()) %>% 
+              ungroup()
+            , by = c('Item')
+            ) %>% 
+  mutate('Percent Total' = Count / ttl_count) %>% 
+  select(-ttl_count) %>% 
+  mutate_at(vars(-Item,-Count,-'Percent Total'), funs(. %>% round(2) %>% scales::dollar())) %>% 
+  mutate_at(vars(-Item,-Count,-Cost), funs(. %>% round(2) %>% scales::percent()))
+
+
+```
+
+## Farmer Availability
+
+```{r}
+
+```
+
+## Farmigo Sales
+
+```{r}
+milc %>% 
+  filter(Category %in% c('Produce - Vegetables','Produce - Fruits')) %>% 
+  filter(Item == 'Peppers - Colored Bell') %>% 
+  select(Item) %>% 
+  distinct() %>% 
+  full_join(sr %>% #obtain full week list
+              rename(Week = 'Week #') %>% 
+              filter(Date <= fp_max & Group_Id != "skip") %>% 
+              select(Week) %>% 
+              distinct()
+            , by = character()
+            ) %>% 
+  left_join(is %>%  
+              filter(Sold != '') %>% 
+              filter(Item == 'Peppers - Colored Bell') %>%
+              select(Week, Item, Sold) %>% 
+              distinct()
+            , by = c('Week','Item')
+            ) %>% 
+  arrange(desc(Week)) %>% 
+  pivot_wider(names_from = Week, values_from = Sold) %>% 
+   replace(is.na(.), '')
+```
+
+## Share Group History
+
+```{r}
+milc %>% 
+  filter(Category %in% c('Produce - Vegetables','Produce - Fruits')) %>% 
+  filter(Item == 'Peppers - Colored Bell') %>% 
+  select(Item) %>% 
+  distinct() %>% 
+  full_join(sr %>% #obtain full week list
+              rename(Week = 'Week #') %>% 
+              filter(Date <= fp_max & Group_Id != "skip") %>% 
+              select(Week) %>% 
+              distinct()
+            , by = character()
+            ) %>% 
+  inner_join(wsl %>% #obtain full group list
+              filter(!is.na(Item)) %>% 
+              select(Week, Group_Id) %>% 
+              distinct()
+            , by = c('Week')
+            ) %>% 
+  left_join(wsl %>%  
+              filter(!is.na(Item) & !is.na(Amt_Share) & !is.na(Prcnt_Amnt)) %>% 
+              filter(Item == 'Peppers - Colored Bell') %>%
+              left_join(sn %>% 
+                          group_by(Week, Group_Id) %>% 
+                          summarise(Members = sum(Members)) %>% 
+                          ungroup()
+                        , by = c('Week','Group_Id')
+                        ) %>% 
+              mutate(Member_actual = ceiling(Prcnt_Amnt*Members),
+                     member_val = ifelse(Member_actual != Members, paste0(Member_actual, ' (%)'), Member_actual)
+                     ) %>% 
+              select(Week, Item, Group_Id, member_val) %>% 
+              distinct()
+            , by = c('Week','Item','Group_Id')
+            ) %>% 
+  arrange(desc(Week)) %>% 
+  pivot_wider(names_from = Week, values_from = member_val) %>% 
+  arrange(Group_Id) %>% 
+   replace(is.na(.), '')
+```
+
