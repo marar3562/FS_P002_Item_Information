@@ -1,27 +1,91 @@
 #
 # 
 
-library(shiny)
+library(googlesheets4)
+library(tidyverse)
+library(DT)
+library(scales)
+
+#gs4_auth(cache = ".secrets") #used to achieve the secrets file
+
+gs4_auth(cache = ".secrets", email = TRUE, use_oob = TRUE) #use in shinyapps prod to connect to data
+#gs4_auth(email = "")
+
+
+#Farmer Produce tab
+sheet_id = "1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+fp = range_read(sheet_id
+                ,sheet = 'farm_produce'
+                ,skip = 1
+                ,col_types = 'icccnnnnncD'
+)
+
+#Master Item List tab
+mil = range_read(sheet_id
+                 ,sheet = 'master_item_list'
+                 ,col_types = 'cccccccnccD'
+)
+
+#Share Rotation tab
+sr = range_read(sheet_id
+                ,sheet = 'share_rotation'
+                ,col_types = '----Dicic----------'
+)
+
+#Weekly Share Lists tab
+wsl = range_read(sheet_id
+                 ,sheet = 'weekly_share_lists'
+                 ,col_types = 'iccicin--D'
+)
+
+#Share Numbers tab
+sn = range_read(sheet_id
+                ,sheet = 'share_numbers'
+                ,col_types = 'icccicD-'
+)
+
+#Inventory Sales tab
+is = range_read(sheet_id
+                ,sheet = 'inv_sales'
+                ,col_types = 'iccnnccD--'
+)
+
+
+fp_max = fp %>%
+  summarise(max = max(`Archive Date`)) %>%
+  pull
+
+mil_max = mil %>%
+  summarise(max = max(`Snapshot Date`)) %>%
+  pull
+
+milc = mil %>% filter(`Snapshot Date` == fp_max)
+
+mitem_list = milc %>% 
+  filter(Category %in% c('Produce - Vegetables','Produce - Fruits')) %>% 
+  select(Item) %>% 
+  distinct() %>% 
+  arrange(Item)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
 
     # Application title
-    titlePanel("Old Faithful Geyser Data"),
+    titlePanel("Produce Item Search"),
 
     # Sidebar with a slider input for number of bins 
     sidebarLayout(
         sidebarPanel(
-            sliderInput("bins",
-                        "Number of bins:",
-                        min = 1,
-                        max = 50,
-                        value = 30)
+            selectInput("mitem","Item",mitem_list$Item)
         ),
 
         # Show a plot of the generated distribution
         mainPanel(
-           plotOutput("distPlot")
+           tableOutput("infotable"),
+           tableOutput("costtable"),
+           #tableOutput("farmigotable")
+           dataTableOutput("farmigotable")
+           
         )
     )
 )
@@ -29,13 +93,78 @@ ui <- fluidPage(
 # Define server logic required to draw a histogram
 server <- function(input, output) {
 
-    output$distPlot <- renderPlot({
-        # generate bins based on input$bins from ui.R
-        x    <- faithful[, 2]
-        bins <- seq(min(x), max(x), length.out = input$bins + 1)
-
-        # draw the histogram with the specified number of bins
-        hist(x, breaks = bins, col = 'darkgray', border = 'white')
+    output$infotable <- renderTable({
+      milc %>% 
+        filter(Item == input$mitem) %>% 
+        select(Item, Category, Per = Preferred_Per_Value, Note = `Farmer Dashboard Notes`) %>% 
+        mutate(n = row_number(),
+               Note = ifelse(is.na(Note), 'FILL ME IN PLEASE!!!', Note)) %>%
+        left_join(fp %>% 
+                    mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
+                    filter(!is.na(availability) & !is.na(Cost)) %>% 
+                    group_by(Item) %>% 
+                    summarise('Average Cost' = mean(Cost)
+                              ,'75th % Cost' = quantile(Cost, 0.75)
+                              ,'50th % Cost' = median(Cost)
+                              ,'25th % Cost' = quantile(Cost, 0.25)
+                    ) %>% 
+                    ungroup() %>% 
+                    mutate_at(vars(-Item), funs(. %>% round(2) %>% scales::dollar()))
+                  , by = c('Item')) %>% 
+        pivot_longer(!n, names_to = "Names", values_to ="Variables") %>% 
+        select(-n) %>% 
+        replace(is.na(.), '')
+    })
+    
+    output$costtable <- renderTable({
+      fp %>% 
+        mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
+        filter(!is.na(availability) & !is.na(Cost)) %>% 
+        filter(Item == input$mitem) %>% 
+        group_by(Item, Cost) %>% 
+        summarise(Count = n()) %>% 
+        arrange(Item, desc(Cost)) %>% 
+        ungroup() %>% 
+        left_join(fp %>% 
+                    mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
+                    filter(Item == input$mitem) %>% 
+                    filter(!is.na(availability) & !is.na(Cost)) %>% 
+                    group_by(Item) %>% 
+                    summarise(ttl_count = n()) %>% 
+                    ungroup()
+                  , by = c('Item')
+        ) %>% 
+        mutate('Percent Total' = Count / ttl_count) %>% 
+        select(-Item,-ttl_count) %>% 
+        mutate_at(vars(-Count,-'Percent Total'), funs(. %>% round(2) %>% scales::dollar())) %>% 
+        mutate_at(vars(-Count,-Cost), funs(. %>% round(2) %>% scales::percent()))
+    })
+    
+    output$farmigotable <- renderDataTable({
+    #output$farmigotable <- renderTable({
+      milc %>% 
+        filter(Item == input$mitem) %>%
+        select(Item) %>% 
+        distinct() %>% 
+        full_join(sr %>% #obtain full week list
+                    rename(Week = 'Week #') %>% 
+                    filter(Date <= fp_max & Group_Id != "skip") %>% 
+                    select(Week) %>% 
+                    distinct()
+                  , by = character()
+        ) %>% 
+        left_join(is %>%  
+                    filter(Sold != '') %>% 
+                    filter(Item == input$mitem) %>%
+                    select(Week, Item, Sold) %>% 
+                    distinct()
+                  , by = c('Week','Item')
+        ) %>% 
+        arrange(desc(Week)) %>% 
+        pivot_wider(names_from = Week, values_from = Sold) %>% 
+        replace(is.na(.), '')
+      #Need to play with fixing width and see if DT or table works better with scrolling...
+      #still unsure which to use here. now about formatting
     })
 }
 

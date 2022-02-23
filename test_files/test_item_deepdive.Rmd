@@ -116,7 +116,6 @@ item_summary <- milc %>%
             , by = c('Item')) %>% 
   pivot_longer(!n, names_to = "names", values_to ="variables") %>% 
   select(-n) %>% 
-  
   replace(is.na(.), '')
 
 item_summary
