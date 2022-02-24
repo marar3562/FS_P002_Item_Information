@@ -195,7 +195,7 @@ milc %>%
 ```{r}
 milc %>% 
   filter(Category %in% c('Produce - Vegetables','Produce - Fruits')) %>% 
-  filter(Item == 'Peppers - Colored Bell') %>% 
+  filter(Item == 'Asparagus') %>% 
   select(Item) %>% 
   distinct() %>% 
   full_join(sr %>% #obtain full week list
@@ -213,7 +213,7 @@ milc %>%
             ) %>% 
   left_join(wsl %>%  
               filter(!is.na(Item) & !is.na(Amt_Share) & !is.na(Prcnt_Amnt)) %>% 
-              filter(Item == 'Peppers - Colored Bell') %>%
+              filter(Item == 'Asparagus') %>%
               left_join(sn %>% 
                           group_by(Week, Group_Id) %>% 
                           summarise(Members = sum(Members)) %>% 
@@ -221,15 +221,21 @@ milc %>%
                         , by = c('Week','Group_Id')
                         ) %>% 
               mutate(Member_actual = ceiling(Prcnt_Amnt*Members),
-                     member_val = ifelse(Member_actual != Members, paste0(Member_actual, ' (%)'), Member_actual)
+                     member_val = ifelse(Member_actual != Members, 1, 0)
                      ) %>% 
-              select(Week, Item, Group_Id, member_val) %>% 
-              distinct()
+              group_by(Week, Item, Group_Id) %>% 
+              summarise(Member_actual = sum(Member_actual),
+                     member_val = sum(member_val)) %>% 
+              ungroup() %>% 
+              mutate(member_val = ifelse(member_val > 0, paste0(Member_actual, '_(%)'), Member_actual)) %>% 
+              select(Week, Item, Group_Id, member_val) 
             , by = c('Week','Item','Group_Id')
             ) %>% 
   arrange(desc(Week)) %>% 
+  mutate(Week = as.character(Week),
+         member_val = as.character(member_val)) %>% 
   pivot_wider(names_from = Week, values_from = member_val) %>% 
   arrange(Group_Id) %>% 
-   replace(is.na(.), '')
+  replace(is.na(.), '')
 ```
 

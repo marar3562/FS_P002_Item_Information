@@ -83,9 +83,10 @@ ui <- fluidPage(
         mainPanel(
            tableOutput("infotable"),
            tableOutput("costtable"),
-           #tableOutput("farmigotable")
-           dataTableOutput("farmigotable")
-           
+           tableOutput("farmigotable"),
+           #dataTableOutput("farmigotable"),
+           tableOutput("grouptable")
+           #dataTableOutput("grouptable")
         )
     )
 )
@@ -140,8 +141,8 @@ server <- function(input, output) {
         mutate_at(vars(-Count,-Cost), funs(. %>% round(2) %>% scales::percent()))
     })
     
-    output$farmigotable <- renderDataTable({
-    #output$farmigotable <- renderTable({
+    #output$farmigotable <- renderDataTable({
+    output$farmigotable <- renderTable({
       milc %>% 
         filter(Item == input$mitem) %>%
         select(Item) %>% 
@@ -161,7 +162,61 @@ server <- function(input, output) {
                   , by = c('Week','Item')
         ) %>% 
         arrange(desc(Week)) %>% 
+        mutate(Item = '') %>% 
+        rename('________' = Item) %>% 
+        mutate(Week = as.character(Week),
+               Sold = as.character(Sold)) %>% 
         pivot_wider(names_from = Week, values_from = Sold) %>% 
+        replace(is.na(.), '')
+      #Need to play with fixing width and see if DT or table works better with scrolling...
+      #still unsure which to use here. now about formatting
+    })
+    
+    #output$grouptable <- renderDataTable({
+    output$grouptable <- renderTable({
+      milc %>% 
+        filter(Item == input$mitem) %>%
+        select(Item) %>% 
+        distinct() %>% 
+        full_join(sr %>% #obtain full week list
+                    rename(Week = 'Week #') %>% 
+                    filter(Date <= fp_max & Group_Id != "skip") %>% 
+                    select(Week) %>% 
+                    distinct()
+                  , by = character()
+        ) %>% 
+        inner_join(wsl %>% #obtain full group list
+                     filter(!is.na(Item)) %>% 
+                     select(Week, Group_Id) %>% 
+                     distinct()
+                   , by = c('Week')
+        ) %>% 
+        left_join(wsl %>%  
+                    filter(!is.na(Item) & !is.na(Amt_Share) & !is.na(Prcnt_Amnt)) %>% 
+                    filter(Item == input$mitem) %>%
+                    left_join(sn %>% 
+                                group_by(Week, Group_Id) %>% 
+                                summarise(Members = sum(Members)) %>% 
+                                ungroup()
+                              , by = c('Week','Group_Id')
+                    ) %>% 
+                    mutate(Member_actual = ceiling(Prcnt_Amnt*Members),
+                           member_val = ifelse(Member_actual != Members, 1, 0)
+                    ) %>% 
+                    group_by(Week, Item, Group_Id) %>% 
+                    summarise(Member_actual = sum(Member_actual),
+                              member_val = sum(member_val)) %>% 
+                    ungroup() %>% 
+                    mutate(member_val = ifelse(member_val > 0, paste0(Member_actual, '_(%)'), Member_actual)) %>% 
+                    select(Week, Item, Group_Id, member_val) 
+                  , by = c('Week','Item','Group_Id')
+        ) %>% 
+        arrange(desc(Week)) %>% 
+        select(-Item) %>% 
+        mutate(Week = as.character(Week),
+               member_val = as.character(member_val)) %>% 
+        pivot_wider(names_from = Week, values_from = member_val) %>% 
+        arrange(Group_Id) %>% 
         replace(is.na(.), '')
       #Need to play with fixing width and see if DT or table works better with scrolling...
       #still unsure which to use here. now about formatting
