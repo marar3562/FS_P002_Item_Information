@@ -5,6 +5,8 @@ library(googlesheets4)
 library(tidyverse)
 library(DT)
 library(scales)
+library(bslib)
+library(thematic)
 
 #gs4_auth(cache = ".secrets") #used to achieve the secrets file
 
@@ -67,62 +69,43 @@ mitem_list = milc %>%
   distinct() %>% 
   arrange(Item)
 
+# Setting Theme (https://shiny.rstudio.com/app-stories/weather-lookup-bslib.html)
+my_theme <- bs_theme(bootswatch = "cerulean")
+# Let thematic know to update the fonts, too
+thematic_shiny(font = "auto")
+
 # Define UI for application that draws a histogram
 ui <- fluidPage(
-
+    theme = my_theme,
+  
     # Application title
     titlePanel("Produce Item Search"),
-
-    # fluidRow(
-    #   column(2,selectInput("mitem","Item",mitem_list$Item))
-    #   ,
-    #   column(8,
-    #          fluidRow(
-    #            fluidRow(
-    #              column(5, tableOutput("infotable"))
-    #              ,column(2, tableOutput("costtable"))
-    #            )
-    #            ,fluidRow(column(8, tableOutput("farmigotable")))
-    #            ,fluidRow(column(8, tableOutput("grouptable")))
-    #          ))
-    # )
     
-    
-    
-    # Sidebar with a slider input for number of bins 
-    # sidebarLayout(
-    #     sidebarPanel(
-    #         selectInput("mitem","Item",mitem_list$Item)
-    #     ),
-    # 
-    #     # Show a plot of the generated distribution
-    #     mainPanel(
-    #        tableOutput("infotable"),
-    #        tableOutput("costtable"),
-    #        tableOutput("farmigotable"),
-    #        #dataTableOutput("farmigotable"),
-    #        tableOutput("grouptable")
-    #        #dataTableOutput("grouptable")
-    #     )
-    # )
-    
-    sidebarLayout(
-      sidebarPanel(
-        selectInput("mitem","Item",mitem_list$Item)
-      ),
-      
-      # Show a plot of the generated distribution
-      mainPanel(fluidRow(
-                  splitLayout(cellWidths = c("50%", "50%"), tableOutput("infotable"),tableOutput("costtable"))
-                )
-                ,fluidRow(dataTableOutput("farmigotable"),style = "height:100px; overflow-y: scroll;overflow-x: scroll;")
-                ,fluidRow(dataTableOutput("grouptable"),style = "height:360px; overflow-y: scroll;overflow-x: scroll;")
-      )
+    tabsetPanel(
+      tabPanel("tab 1",
+               sidebarLayout(
+                 sidebarPanel(
+                   radioButtons("current_theme", "App Theme:", c("Light" = "cerulean", "Dark" = "slate")),
+                   selectInput("mitem","Item",mitem_list$Item)
+                 ),
+                 
+                 # Show a plot of the generated distribution
+                 mainPanel(fluidRow(
+                   splitLayout(cellWidths = c("50%", "50%"), tableOutput("infotable"),tableOutput("costtable"))
+                 )
+                 ,fluidRow(dataTableOutput("farmigotable"),style = "height:120px; overflow-y: scroll;overflow-x: scroll;")
+                 ,fluidRow(dataTableOutput("grouptable"),style = "height:400px; overflow-y: scroll;overflow-x: scroll;")
+                 )
+               )
+               )
     )
+    
 )
 
 # Define server logic required to draw a histogram
-server <- function(input, output) {
+server <- function(input, output, session) {
+  
+  
 
     output$infotable <- renderTable({
       milc %>% 
@@ -146,7 +129,7 @@ server <- function(input, output) {
         pivot_longer(!n, names_to = "Names", values_to ="Variables") %>% 
         select(-n) %>% 
         replace(is.na(.), '')
-    })
+    }) 
     
     output$costtable <- renderTable({
       fp %>% 
@@ -174,7 +157,7 @@ server <- function(input, output) {
     
     output$farmigotable <- renderDataTable({
     #output$farmigotable <- renderTable({
-      dt_ft <- milc %>% 
+      dt <- milc %>% 
         filter(Item == input$mitem) %>%
         select(Item) %>% 
         distinct() %>% 
@@ -194,24 +177,32 @@ server <- function(input, output) {
         ) %>% 
         arrange(desc(Week)) %>% 
         mutate(Item = '') %>% 
-        rename('________' = Item) %>% 
+        rename('__________' = Item) %>% 
         mutate(Week = as.character(Week),
-               Sold = as.character(Sold)) %>% 
+               Sold = as.character(Sold)) 
+      dt_ft = dt %>% 
         pivot_wider(names_from = Week, values_from = Sold) %>% 
         replace(is.na(.), '')
       
       dat <- datatable(dt_ft
                        , rownames = FALSE                      #remove row numbers
                        , class = 'cell-border stripe'          #add lines between rows/columns
-                       , options = list(dom = 't'))
+                       , options = list(dom = 't')) %>%    
+        formatStyle(
+          names(dt %>% 
+                  mutate(Sold = ifelse(Sold != '', 1, 0)) %>% 
+                  pivot_wider(names_from = Week, values_from = Sold) %>% 
+                  replace(is.na(.), 0)
+          )
+          , backgroundColor = styleInterval(c(1), c('azure2', 'seagreen'))   #updating color background of each cell
+          , color = styleInterval(c(1), c('black', 'white'))                 #updating text color of each cell
+        )
       return(dat)
-      #Need to play with fixing width and see if DT or table works better with scrolling...
-      #still unsure which to use here. now about formatting
-    })
+    }) 
     
     output$grouptable <- renderDataTable({
     #output$grouptable <- renderTable({
-      dt_gt <- milc %>% 
+      dt <- milc %>% 
         filter(Item == input$mitem) %>%
         select(Item) %>% 
         distinct() %>% 
@@ -243,11 +234,12 @@ server <- function(input, output) {
                     group_by(Week, Item, Group_Id) %>% 
                     summarise(Member_actual = sum(Member_actual),
                               member_val = sum(member_val)) %>% 
-                    ungroup() %>% 
-                    mutate(member_val = ifelse(member_val > 0, paste0(Member_actual, '_(%)'), Member_actual)) %>% 
-                    select(Week, Item, Group_Id, member_val) 
+                    ungroup() 
                   , by = c('Week','Item','Group_Id')
-        ) %>% 
+        ) 
+      dt_gt <- dt %>% 
+        mutate(member_val = ifelse(member_val > 0, paste0(Member_actual, '_(%)'), Member_actual)) %>% 
+        select(Week, Item, Group_Id, member_val) %>% 
         arrange(desc(Week)) %>% 
         select(-Item) %>% 
         mutate(Week = as.character(Week),
@@ -259,11 +251,29 @@ server <- function(input, output) {
       dat <- datatable(dt_gt
                        , rownames = FALSE                      #remove row numbers
                        , class = 'cell-border stripe'          #add lines between rows/columns
-                       , options = list(dom = 't'))
+                       , options = list(dom = 't')) %>%    
+        formatStyle(
+          names(dt %>% 
+                  select(Week, Item, Group_Id, member_val = Member_actual) %>% 
+                  arrange(desc(Week)) %>% 
+                  select(-Item) %>% 
+                  mutate(Week = as.character(Week),
+                         member_val = as.integer(member_val)) %>% 
+                  pivot_wider(names_from = Week, values_from = member_val) %>% 
+                  arrange(Group_Id) %>% 
+                  replace(is.na(.), 0)
+                  )
+          , backgroundColor = styleInterval(c(1), c('azure2', 'seagreen'))   #updating color background of each cell
+          , color = styleInterval(c(1), c('black', 'white'))                 #updating text color of each cell
+        )
       return(dat)
-      
-      #Need to play with fixing width and see if DT or table works better with scrolling...
-      #still unsure which to use here. now about formatting
+    }) 
+    
+    observe({
+      # Make sure theme is kept current with desired
+      session$setCurrentTheme(
+        bs_theme_update(my_theme, bootswatch = input$current_theme)
+      )
     })
 }
 

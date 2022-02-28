@@ -1,0 +1,13 @@
+name: fairshares_item_information
+title: fairshares_item_information
+username:
+account: rmargh
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 5750889
+bundleId: 5626453
+url: https://rmargh.shinyapps.io/fairshares_item_information/
+when: 1646077283.18182
+lastSyncTime: 1646077283.18182
+asMultiple: FALSE
+asStatic: FALSE
