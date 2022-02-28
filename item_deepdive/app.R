@@ -73,21 +73,51 @@ ui <- fluidPage(
     # Application title
     titlePanel("Produce Item Search"),
 
+    # fluidRow(
+    #   column(2,selectInput("mitem","Item",mitem_list$Item))
+    #   ,
+    #   column(8,
+    #          fluidRow(
+    #            fluidRow(
+    #              column(5, tableOutput("infotable"))
+    #              ,column(2, tableOutput("costtable"))
+    #            )
+    #            ,fluidRow(column(8, tableOutput("farmigotable")))
+    #            ,fluidRow(column(8, tableOutput("grouptable")))
+    #          ))
+    # )
+    
+    
+    
     # Sidebar with a slider input for number of bins 
+    # sidebarLayout(
+    #     sidebarPanel(
+    #         selectInput("mitem","Item",mitem_list$Item)
+    #     ),
+    # 
+    #     # Show a plot of the generated distribution
+    #     mainPanel(
+    #        tableOutput("infotable"),
+    #        tableOutput("costtable"),
+    #        tableOutput("farmigotable"),
+    #        #dataTableOutput("farmigotable"),
+    #        tableOutput("grouptable")
+    #        #dataTableOutput("grouptable")
+    #     )
+    # )
+    
     sidebarLayout(
-        sidebarPanel(
-            selectInput("mitem","Item",mitem_list$Item)
-        ),
-
-        # Show a plot of the generated distribution
-        mainPanel(
-           tableOutput("infotable"),
-           tableOutput("costtable"),
-           tableOutput("farmigotable"),
-           #dataTableOutput("farmigotable"),
-           tableOutput("grouptable")
-           #dataTableOutput("grouptable")
-        )
+      sidebarPanel(
+        selectInput("mitem","Item",mitem_list$Item)
+      ),
+      
+      # Show a plot of the generated distribution
+      mainPanel(fluidRow(
+                  splitLayout(cellWidths = c("50%", "50%"), tableOutput("infotable"),tableOutput("costtable"))
+                )
+                ,fluidRow(dataTableOutput("farmigotable"),style = "height:100px; overflow-y: scroll;overflow-x: scroll;")
+                ,fluidRow(dataTableOutput("grouptable"),style = "height:360px; overflow-y: scroll;overflow-x: scroll;")
+      )
     )
 )
 
@@ -112,6 +142,7 @@ server <- function(input, output) {
                     ungroup() %>% 
                     mutate_at(vars(-Item), funs(. %>% round(2) %>% scales::dollar()))
                   , by = c('Item')) %>% 
+        select(-Item) %>% 
         pivot_longer(!n, names_to = "Names", values_to ="Variables") %>% 
         select(-n) %>% 
         replace(is.na(.), '')
@@ -141,9 +172,9 @@ server <- function(input, output) {
         mutate_at(vars(-Count,-Cost), funs(. %>% round(2) %>% scales::percent()))
     })
     
-    #output$farmigotable <- renderDataTable({
-    output$farmigotable <- renderTable({
-      milc %>% 
+    output$farmigotable <- renderDataTable({
+    #output$farmigotable <- renderTable({
+      dt_ft <- milc %>% 
         filter(Item == input$mitem) %>%
         select(Item) %>% 
         distinct() %>% 
@@ -168,13 +199,19 @@ server <- function(input, output) {
                Sold = as.character(Sold)) %>% 
         pivot_wider(names_from = Week, values_from = Sold) %>% 
         replace(is.na(.), '')
+      
+      dat <- datatable(dt_ft
+                       , rownames = FALSE                      #remove row numbers
+                       , class = 'cell-border stripe'          #add lines between rows/columns
+                       , options = list(dom = 't'))
+      return(dat)
       #Need to play with fixing width and see if DT or table works better with scrolling...
       #still unsure which to use here. now about formatting
     })
     
-    #output$grouptable <- renderDataTable({
-    output$grouptable <- renderTable({
-      milc %>% 
+    output$grouptable <- renderDataTable({
+    #output$grouptable <- renderTable({
+      dt_gt <- milc %>% 
         filter(Item == input$mitem) %>%
         select(Item) %>% 
         distinct() %>% 
@@ -218,6 +255,13 @@ server <- function(input, output) {
         pivot_wider(names_from = Week, values_from = member_val) %>% 
         arrange(Group_Id) %>% 
         replace(is.na(.), '')
+      
+      dat <- datatable(dt_gt
+                       , rownames = FALSE                      #remove row numbers
+                       , class = 'cell-border stripe'          #add lines between rows/columns
+                       , options = list(dom = 't'))
+      return(dat)
+      
       #Need to play with fixing width and see if DT or table works better with scrolling...
       #still unsure which to use here. now about formatting
     })
