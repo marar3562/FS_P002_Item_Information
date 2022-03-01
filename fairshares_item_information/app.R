@@ -53,16 +53,17 @@ is = range_read(sheet_id
                 ,col_types = 'iccnnccD--'
 )
 
+########## Delorean ##########
+# Place holder
+##############################
 
+########## Present Day ##########
 fp_max = fp %>%
   summarise(max = max(`Archive Date`)) %>%
   pull
 
-mil_max = mil %>%
-  summarise(max = max(`Snapshot Date`)) %>%
-  pull
-
 milc = mil %>% filter(`Snapshot Date` == fp_max)
+##############################
 
 mitem_list = milc %>% 
   filter(Category %in% c('Produce - Vegetables','Produce - Fruits')) %>% 
