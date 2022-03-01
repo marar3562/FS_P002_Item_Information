@@ -16,41 +16,40 @@ gs4_auth(cache = ".secrets", email = TRUE, use_oob = TRUE) #use in shinyapps pro
 
 
 #Farmer Produce tab
-sheet_id = "1m45w0hQOkvUFvNpc5MwQcN4snGs0Lkrb6kJfOUJf6tw"
+sheet_id = "1xs8TAMrSsJuL_gou4y0DBH3IkaTH0eBn_pdboCGWFTI"
 fp = range_read(sheet_id
                 ,sheet = 'farm_produce'
-                ,skip = 1
-                ,col_types = 'icccnnnnncD'
+                ,col_types = 'icccnnnnncDcD'
 )
 
 #Master Item List tab
 mil = range_read(sheet_id
                  ,sheet = 'master_item_list'
-                 ,col_types = 'cccccccnccD'
+                 ,col_types = 'cccccccnccDc'
 )
 
 #Share Rotation tab
 sr = range_read(sheet_id
                 ,sheet = 'share_rotation'
-                ,col_types = '----Dicic----------'
+                ,col_types = 'Dicicc'
 )
 
 #Weekly Share Lists tab
 wsl = range_read(sheet_id
                  ,sheet = 'weekly_share_lists'
-                 ,col_types = 'iccicin--D'
+                 ,col_types = 'iccicinDcD'
 )
 
 #Share Numbers tab
 sn = range_read(sheet_id
                 ,sheet = 'share_numbers'
-                ,col_types = 'icccicD-'
+                ,col_types = 'icccicDcD'
 )
 
 #Inventory Sales tab
 is = range_read(sheet_id
                 ,sheet = 'inv_sales'
-                ,col_types = 'iccnnccD--'
+                ,col_types = 'iccnnccDcD'
 )
 
 ########## Delorean ##########
@@ -59,71 +58,62 @@ is = range_read(sheet_id
 
 ########## Present Day ##########
 fp_max = fp %>%
-  summarise(max = max(`Archive Date`)) %>%
+  summarise(max = max(archive_date)) %>%
   pull
 
-milc = mil %>% filter(`Snapshot Date` == fp_max)
+milc = mil %>% filter(snapshot_date == fp_max)
 ##############################
-
-mitem_list = milc %>% 
-  filter(Category %in% c('Produce - Vegetables','Produce - Fruits')) %>% 
-  select(Item) %>% 
-  distinct() %>% 
-  arrange(Item)
-
 
 ## Data sets
 #creating pivot table initial data set
 fp_pivot_table = fp %>% 
   mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>% 
-  filter(!is.na(availability)) %>% 
-  left_join(sr %>% #obtain week date
-              rename(Week = 'Week #') %>% 
-              select(Week, Date) %>% 
-              distinct()
-            , by = c('Week')
-  ) 
+  filter(!is.na(availability)) 
 
 #creating data set for time series (this could get large over time so potential efficiency improvement)
 ts_init <- sr %>% #obtain full week list
-  rename(Week = 'Week #') %>% 
-  filter(Date <= fp_max & Group_Id != "skip") %>% 
-  select(Week, Date) %>% 
+  filter(date <= fp_max & group_id != "skip") %>% 
+  select(week, date) %>% 
   distinct() %>% 
   full_join(fp %>% #cross join weeks with full Item list
-              filter(!is.na(av_min) | !is.na(av_max)) %>% 
-              select(Item) %>% 
+              filter(av_min > 0 | av_max > 0) %>% 
+              select(item) %>% 
               distinct() %>% 
               left_join(milc %>% #adding in Per value by Item
-                          select(Item,Per = Preferred_Per_Value) %>% 
+                          select(item,per = preferred_per_value) %>% 
                           distinct()
-                        , by = c('Item')
+                        , by = c('item')
               ) %>% 
-              arrange(Item, Per)
+              arrange(item, per)
             , by = character()) %>% 
-  left_join(fp %>% #bring in availability for each Item
-              mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>% 
-              filter(!is.na(availability)) %>% 
-              group_by(Item, Week) %>% 
+  left_join(fp_pivot_table %>% #bring in availability for each Item
+              group_by(item, week) %>% 
               summarise(availability = sum(availability)) %>%
               ungroup()
-            , by = c('Week','Item')) %>% 
+            , by = c('week','item')) %>% 
   mutate(availability = ifelse(is.na(availability), 0, availability)) #fill in NAs with 0
 
 ##Filter variables 
 #obtaining item list for filter
 item_list = fp %>% 
-  filter(!is.na(av_min) | !is.na(av_max)) %>%
-  select(Item) %>% 
+  filter(av_min > 0 | av_max > 0) %>%
+  select(item) %>% 
   distinct() %>% 
-  arrange(Item)
+  arrange(item)
 
 #determine min date value for date range filter
 fp_min = fp_pivot_table %>%
-  summarise(min = min(Date)) %>%
+  summarise(min = min(date)) %>%
   pull
 
+#obtaining master item list for filter (more inclusive, even if no availability in farmer produce)
+mitem_list = milc %>% 
+  filter(category %in% c('Produce - Vegetables','Produce - Fruits')) %>% 
+  select(item) %>% 
+  distinct() %>% 
+  arrange(item)
 
+##Theme Setup
 # Setting Theme (https://shiny.rstudio.com/app-stories/weather-lookup-bslib.html)
 my_theme <- bs_theme(bootswatch = "cerulean",
                      base_font = font_google("Roboto"))
@@ -150,9 +140,8 @@ ui <- fluidPage(
              sidebarLayout(
                sidebarPanel(
                  dateRangeInput("daterange","Date Range",fp_min, fp_max),     #date range
-                 selectInput("item","Item",item_list$Item, multiple = TRUE),  #item list
-                 actionButton("update", "Click to Show Charts")                       #may want to replace with Submit button
-                 #submitButton("Update View", icon("refresh"))
+                 selectInput("item","Item",item_list$item, multiple = TRUE),  #item list
+                 actionButton("update", "Click to Show Charts")               #allows data to update or not
                ),
                
                # Show a plot of the generated distribution
@@ -165,7 +154,7 @@ ui <- fluidPage(
     tabPanel("Produce Item Search",
              sidebarLayout(
                sidebarPanel(
-                 selectInput("mitem","Item",mitem_list$Item)
+                 selectInput("mitem","Item",mitem_list$item)
                ),
                
                # Show a plot of the generated distribution
@@ -192,13 +181,13 @@ server <- function(input, output, session) {
   observeEvent(input$update, {
     if (is.null(input$item)) {
       fmatrix$data = fp_pivot_table %>%
-        filter(Date >= format(input$daterange[1]) & Date <= format(input$daterange[2]))
+        filter(date >= format(input$daterange[1]) & date <= format(input$daterange[2]))
       timeseries$data = NULL
     } else {
       fmatrix$data = fp_pivot_table %>%
-        filter(Item %in% input$item & Date >= format(input$daterange[1]) & Date <= format(input$daterange[2]))
+        filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2]))
       timeseries$data = ts_init %>%
-        filter(Item %in% input$item & Date >= format(input$daterange[1]) & Date <= format(input$daterange[2]))
+        filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2]))
       
     }
     
@@ -209,11 +198,11 @@ server <- function(input, output, session) {
       return()
     } else {
       df <- fmatrix$data %>%
-        group_by(Farm, Item) %>% 
+        group_by(farm, item) %>% 
         summarise(availability = sum(availability)) %>% 
         ungroup() %>% 
-        pivot_wider(names_from = Farm, values_from = availability) %>% 
-        arrange(Item) %>% 
+        pivot_wider(names_from = farm, values_from = availability) %>% 
+        arrange(item) %>% 
         replace(is.na(.), 0)
       dat <- datatable(df
                        , rownames = FALSE                      #remove row numbers
@@ -237,11 +226,11 @@ server <- function(input, output, session) {
       return()
     } else {
       ts <- timeseries$data %>%
-        filter(Item %in% input$item & Date >= format(input$daterange[1]) & Date <= format(input$daterange[2])) %>%
-        ggplot(aes(x=Date, y=availability)) +
-        geom_point(color = c('seagreen')) +
-        geom_line(color = c('seagreen')) +
-        facet_grid(Item + Per~.)
+        filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) %>%
+        ggplot(aes(x=date, y=availability)) +
+          geom_point(color = c('seagreen')) +
+          geom_line(color = c('seagreen')) +
+          facet_grid(item + per~.)
       
       return(ts)
     }
@@ -252,23 +241,23 @@ server <- function(input, output, session) {
   ##############  Produce Item Search tab  ############## 
   output$infotable <- renderTable({
     milc %>% 
-      filter(Item == input$mitem) %>% 
-      select(Item, Category, Per = Preferred_Per_Value, Note = `Farmer Dashboard Notes`) %>% 
+      filter(item == input$mitem) %>% 
+      select(item, category, per = preferred_per_value, Note = farmer_dashboard_notes) %>% 
       mutate(n = row_number(),
              Note = ifelse(is.na(Note), 'FILL ME IN PLEASE!!!', Note)) %>%
       left_join(fp %>% 
                   mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
-                  filter(!is.na(availability) & !is.na(Cost)) %>% 
-                  group_by(Item) %>% 
-                  summarise('Average Cost' = mean(Cost)
-                            ,'75th % Cost' = quantile(Cost, 0.75)
-                            ,'50th % Cost' = median(Cost)
-                            ,'25th % Cost' = quantile(Cost, 0.25)
+                  filter(!is.na(availability) & !is.na(cost)) %>% 
+                  group_by(item) %>% 
+                  summarise('Average Cost' = mean(cost)
+                            ,'75th % Cost' = quantile(cost, 0.75)
+                            ,'50th % Cost' = median(cost)
+                            ,'25th % Cost' = quantile(cost, 0.25)
                   ) %>% 
                   ungroup() %>% 
-                  mutate_at(vars(-Item), funs(. %>% round(2) %>% scales::dollar()))
-                , by = c('Item')) %>% 
-      select(-Item) %>% 
+                  mutate_at(vars(-item), funs(. %>% round(2) %>% scales::dollar()))
+                , by = c('item')) %>% 
+      select(-item) %>% 
       pivot_longer(!n, names_to = "Names", values_to ="Variables") %>% 
       select(-n) %>% 
       replace(is.na(.), '')
@@ -277,54 +266,53 @@ server <- function(input, output, session) {
   output$costtable <- renderTable({
     fp %>% 
       mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
-      filter(!is.na(availability) & !is.na(Cost)) %>% 
-      filter(Item == input$mitem) %>% 
-      group_by(Item, Cost) %>% 
-      summarise(Count = n()) %>% 
-      arrange(Item, desc(Cost)) %>% 
+      filter(!is.na(availability) & !is.na(cost)) %>% 
+      filter(item == input$mitem) %>% 
+      group_by(item, cost) %>% 
+      summarise(count = n()) %>% 
+      arrange(item, desc(cost)) %>% 
       ungroup() %>% 
       left_join(fp %>% 
                   mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
-                  filter(Item == input$mitem) %>% 
-                  filter(!is.na(availability) & !is.na(Cost)) %>% 
-                  group_by(Item) %>% 
+                  filter(item == input$mitem) %>% 
+                  filter(!is.na(availability) & !is.na(cost)) %>% 
+                  group_by(item) %>% 
                   summarise(ttl_count = n()) %>% 
                   ungroup()
-                , by = c('Item')
+                , by = c('item')
       ) %>% 
-      mutate('Percent Total' = Count / ttl_count) %>% 
-      select(-Item,-ttl_count) %>% 
-      mutate_at(vars(-Count,-'Percent Total'), funs(. %>% round(2) %>% scales::dollar())) %>% 
-      mutate_at(vars(-Count,-Cost), funs(. %>% round(2) %>% scales::percent()))
+      mutate('Percent Total' = count / ttl_count) %>% 
+      select(-item,-ttl_count) %>% 
+      mutate_at(vars(-count,-'Percent Total'), funs(. %>% round(2) %>% scales::dollar())) %>% 
+      mutate_at(vars(-count,-cost), funs(. %>% round(2) %>% scales::percent())) %>% 
+      rename(Cost = cost, Count = count)
   })
   
   output$farmigotable <- renderDataTable({
-    #output$farmigotable <- renderTable({
     dt <- milc %>% 
-      filter(Item == input$mitem) %>%
-      select(Item) %>% 
+      filter(item == input$mitem) %>%
+      select(item) %>% 
       distinct() %>% 
       full_join(sr %>% #obtain full week list
-                  rename(Week = 'Week #') %>% 
-                  filter(Date <= fp_max & Group_Id != "skip") %>% 
-                  select(Week) %>% 
+                  filter(date <= fp_max & group_id != "skip") %>% 
+                  select(week) %>% 
                   distinct()
                 , by = character()
       ) %>% 
       left_join(is %>%  
-                  filter(Sold != '') %>% 
-                  filter(Item == input$mitem) %>%
-                  select(Week, Item, Sold) %>% 
+                  filter(sold != '') %>% 
+                  filter(item == input$mitem) %>%
+                  select(week, item, sold) %>% 
                   distinct()
-                , by = c('Week','Item')
+                , by = c('week','item')
       ) %>% 
-      arrange(desc(Week)) %>% 
-      mutate(Item = '') %>% 
-      rename('__________' = Item) %>% 
-      mutate(Week = as.character(Week),
-             Sold = as.character(Sold)) 
+      arrange(desc(week)) %>% 
+      mutate(item = '') %>% 
+      rename('_________' = item) %>% 
+      mutate(week = as.character(week),
+             sold = as.character(sold)) 
     dt_ft = dt %>% 
-      pivot_wider(names_from = Week, values_from = Sold) %>% 
+      pivot_wider(names_from = week, values_from = sold) %>% 
       replace(is.na(.), '')
     
     dat <- datatable(dt_ft
@@ -333,8 +321,8 @@ server <- function(input, output, session) {
                      , options = list(dom = 't')) %>%    
       formatStyle(
         names(dt %>% 
-                mutate(Sold = ifelse(Sold != '', 1, 0)) %>% 
-                pivot_wider(names_from = Week, values_from = Sold) %>% 
+                mutate(sold = ifelse(sold != '', 1, 0)) %>% 
+                pivot_wider(names_from = week, values_from = sold) %>% 
                 replace(is.na(.), 0)
         )
         , backgroundColor = styleInterval(c(1), c('azure2', 'seagreen'))   #updating color background of each cell
@@ -344,51 +332,50 @@ server <- function(input, output, session) {
   }) 
   
   output$grouptable <- renderDataTable({
-    #output$grouptable <- renderTable({
     dt <- milc %>% 
-      filter(Item == input$mitem) %>%
-      select(Item) %>% 
+      filter(item == input$mitem) %>%
+      select(item) %>% 
       distinct() %>% 
       full_join(sr %>% #obtain full week list
-                  rename(Week = 'Week #') %>% 
-                  filter(Date <= fp_max & Group_Id != "skip") %>% 
-                  select(Week) %>% 
+                  filter(date <= fp_max & group_id != "skip") %>% 
+                  select(week) %>% 
                   distinct()
                 , by = character()
       ) %>% 
       inner_join(wsl %>% #obtain full group list
-                   filter(!is.na(Item)) %>% 
-                   select(Week, Group_Id) %>% 
+                   filter(!is.na(item)) %>% 
+                   select(week, group_id) %>% 
                    distinct()
-                 , by = c('Week')
+                 , by = c('week')
       ) %>% 
       left_join(wsl %>%  
-                  filter(!is.na(Item) & !is.na(Amt_Share) & !is.na(Prcnt_Amnt)) %>% 
-                  filter(Item == input$mitem) %>%
+                  filter(!is.na(item) & !is.na(amt_share) & !is.na(prcnt_amnt)) %>% 
+                  filter(item == input$mitem) %>%
                   left_join(sn %>% 
-                              group_by(Week, Group_Id) %>% 
-                              summarise(Members = sum(Members)) %>% 
+                              group_by(week, group_id) %>% 
+                              summarise(members = sum(members)) %>% 
                               ungroup()
-                            , by = c('Week','Group_Id')
+                            , by = c('week','group_id')
                   ) %>% 
-                  mutate(Member_actual = ceiling(Prcnt_Amnt*Members),
-                         member_val = ifelse(Member_actual != Members, 1, 0)
+                  mutate(member_actual = ceiling(prcnt_amnt*members),
+                         member_val = ifelse(member_actual != members, 1, 0)
                   ) %>% 
-                  group_by(Week, Item, Group_Id) %>% 
-                  summarise(Member_actual = sum(Member_actual),
+                  group_by(week, item, group_id) %>% 
+                  summarise(member_actual = sum(member_actual),
                             member_val = sum(member_val)) %>% 
                   ungroup() 
-                , by = c('Week','Item','Group_Id')
+                , by = c('week','item','group_id')
       ) 
     dt_gt <- dt %>% 
-      mutate(member_val = ifelse(member_val > 0, paste0(Member_actual, '_(%)'), Member_actual)) %>% 
-      select(Week, Item, Group_Id, member_val) %>% 
-      arrange(desc(Week)) %>% 
-      select(-Item) %>% 
-      mutate(Week = as.character(Week),
+      mutate(member_val = ifelse(member_val > 0, paste0(member_actual, '_(%)'), member_actual)) %>% 
+      select(week, item, group_id, member_val) %>% 
+      arrange(desc(week)) %>% 
+      select(-item) %>% 
+      mutate(week = as.character(week),
              member_val = as.character(member_val)) %>% 
-      pivot_wider(names_from = Week, values_from = member_val) %>% 
-      arrange(Group_Id) %>% 
+      pivot_wider(names_from = week, values_from = member_val) %>% 
+      arrange(group_id) %>% 
+      rename(Group_Id = group_id) %>% 
       replace(is.na(.), '')
     
     dat <- datatable(dt_gt
@@ -397,13 +384,14 @@ server <- function(input, output, session) {
                      , options = list(dom = 't')) %>%    
       formatStyle(
         names(dt %>% 
-                select(Week, Item, Group_Id, member_val = Member_actual) %>% 
-                arrange(desc(Week)) %>% 
-                select(-Item) %>% 
-                mutate(Week = as.character(Week),
+                select(week, item, group_id, member_val = member_actual) %>% 
+                arrange(desc(week)) %>% 
+                select(-item) %>% 
+                mutate(week = as.character(week),
                        member_val = as.integer(member_val)) %>% 
-                pivot_wider(names_from = Week, values_from = member_val) %>% 
-                arrange(Group_Id) %>% 
+                pivot_wider(names_from = week, values_from = member_val) %>% 
+                arrange(group_id) %>% 
+                rename(Group_Id = group_id) %>% 
                 replace(is.na(.), 0)
         )
         , backgroundColor = styleInterval(c(1), c('azure2', 'seagreen'))   #updating color background of each cell
