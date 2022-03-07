@@ -115,7 +115,7 @@ mitem_list = milc %>%
 
 ##Theme Setup
 # Setting Theme (https://shiny.rstudio.com/app-stories/weather-lookup-bslib.html)
-my_theme <- bs_theme(bootswatch = "cerulean",
+my_theme <- bs_theme(bootswatch = "flatly",
                      base_font = font_google("Roboto"))
 # Let thematic know to update the fonts, too
 thematic_shiny(font = "auto")
@@ -127,11 +127,16 @@ ui <- fluidPage(
   
   # Application title
   div(id = "page-top",
-      radioButtons("current_theme", "App Theme:", c("Light" = "cerulean", "Dark" = "slate"), inline = TRUE)
+      fluidRow(img(src="logo.png", height="5%", width="5%"),
+               column(3, radioButtons("current_theme", "App Theme:", c("Light" = "flatly", "Dark" = "slate"), inline = TRUE))
+      )
   ),
   div(
     id = "app-title",
-    titlePanel(title=div(img(src="logo.png", height="4%", width="4%"), "Fair Shares Item Information"))
+    titlePanel(title="Fair Shares Item Information"
+               ,tags$head(tags$link(rel = "icon", type = "image/png", href = "logo.png"),
+                         tags$title("FS Item Information"))
+               )
   ),
   
   tabsetPanel(
@@ -161,8 +166,8 @@ ui <- fluidPage(
                mainPanel(fluidRow(
                  splitLayout(cellWidths = c("50%", "50%"), tableOutput("infotable"),tableOutput("costtable"))
                )
-               ,fluidRow(dataTableOutput("farmigotable"),style = "height:140px; overflow-y: scroll;overflow-x: scroll;")
-               ,fluidRow(dataTableOutput("grouptable"),style = "height:480px; overflow-y: scroll;overflow-x: scroll;")
+               ,fluidRow(dataTableOutput("farmigotable"),style = "height:175px; overflow-y: scroll;overflow-x: scroll;")
+               ,fluidRow(dataTableOutput("grouptable"),style = "height:525px; overflow-y: scroll;overflow-x: scroll;")
                )
              )
     )
@@ -201,6 +206,7 @@ server <- function(input, output, session) {
         group_by(farm, item) %>% 
         summarise(availability = sum(availability)) %>% 
         ungroup() %>% 
+        filter(availability > 0) %>% 
         pivot_wider(names_from = farm, values_from = availability) %>% 
         arrange(item) %>% 
         replace(is.na(.), 0)
@@ -318,6 +324,10 @@ server <- function(input, output, session) {
     dat <- datatable(dt_ft
                      , rownames = FALSE                      #remove row numbers
                      , class = 'cell-border stripe'          #add lines between rows/columns
+                     , caption = htmltools::tags$caption(
+                       style = 'caption-side: top; text-align: left;'
+                       ,'Farmigo Sales'
+                     )
                      , options = list(dom = 't')) %>%    
       formatStyle(
         names(dt %>% 
@@ -381,6 +391,10 @@ server <- function(input, output, session) {
     dat <- datatable(dt_gt
                      , rownames = FALSE                      #remove row numbers
                      , class = 'cell-border stripe'          #add lines between rows/columns
+                     , caption = htmltools::tags$caption(
+                       style = 'caption-side: top; text-align: left;'
+                       ,'Share Quantity - (%) means only for percentage of members'
+                     )
                      , options = list(dom = 't')) %>%    
       formatStyle(
         names(dt %>% 
