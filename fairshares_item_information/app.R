@@ -145,7 +145,9 @@ ui <- fluidPage(
              sidebarLayout(
                sidebarPanel(
                  dateRangeInput("daterange","Date Range",fp_min, fp_max),     #date range
-                 selectInput("item","Item",item_list$item, multiple = TRUE),  #item list
+                 selectInput("item","Item*",item_list$item, multiple = TRUE),  #item list
+                 h6("* The Time Series chart will only appear if an Item(s) is selected in the filter above.
+                    The Item List is based on the Farmer Produce List."),
                  actionButton("update", "Click to Show Charts")               #allows data to update or not
                ),
                
@@ -159,7 +161,9 @@ ui <- fluidPage(
     tabPanel("Produce Item Search",
              sidebarLayout(
                sidebarPanel(
-                 selectInput("mitem","Item",mitem_list$item)
+                 selectInput("mitem","Item*",mitem_list$item),
+                 h6("* Only a single Item can be selected at a time. 
+                    The Item List is based on Items from the Master List with a filter on Category.")
                ),
                
                # Show a plot of the generated distribution
@@ -184,7 +188,7 @@ server <- function(input, output, session) {
   timeseries = reactiveValues(data = NULL)
   
   observeEvent(input$update, {
-    if (is.null(input$item)) {
+    if (is.null(input$item)) { #only update matrix if item filter is blank
       fmatrix$data = fp_pivot_table %>%
         filter(date >= format(input$daterange[1]) & date <= format(input$daterange[2]))
       timeseries$data = NULL
@@ -199,7 +203,7 @@ server <- function(input, output, session) {
   })
   
   output$farmer_item_table <- renderDataTable({
-    if (is.null(fmatrix$data)) {
+    if (is.null(fmatrix$data)) { #only update time series chart if item filter is populated
       return()
     } else {
       df <- fmatrix$data %>%
