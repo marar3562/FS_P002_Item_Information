@@ -47,9 +47,15 @@ sn = range_read(sheet_id
 )
 
 #Inventory Sales tab
-is = range_read(sheet_id
-                ,sheet = 'inv_sales'
-                ,col_types = 'iccnnccDcD'
+# is = range_read(sheet_id
+#                 ,sheet = 'inv_sales'
+#                 ,col_types = 'iccnnccDcD'
+# )
+
+#Sales Only tab
+so = range_read(sheet_id
+                ,sheet = 'sales_only'
+                ,col_types = 'icccDcD'
 )
 
 ########## Delorean ##########
@@ -309,7 +315,7 @@ server <- function(input, output, session) {
                   distinct()
                 , by = character()
       ) %>% 
-      left_join(is %>%  
+      left_join(so %>%  
                   filter(sold != '') %>% 
                   filter(item == input$mitem) %>%
                   select(week, item, sold) %>% 
