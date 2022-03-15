@@ -19,7 +19,7 @@ gs4_auth(cache = ".secrets", email = TRUE, use_oob = TRUE) #use in shinyapps pro
 sheet_id = "1xs8TAMrSsJuL_gou4y0DBH3IkaTH0eBn_pdboCGWFTI"
 fp = range_read(sheet_id
                 ,sheet = 'farm_produce'
-                ,col_types = 'icccnnnnncDcD'
+                ,col_types = 'icccnnnnncDcDc'
 )
 
 #Master Item List tab
@@ -31,19 +31,19 @@ mil = range_read(sheet_id
 #Share Rotation tab
 sr = range_read(sheet_id
                 ,sheet = 'share_rotation'
-                ,col_types = 'Dicicc'
+                ,col_types = 'Diciccc'
 )
 
 #Weekly Share Lists tab
 wsl = range_read(sheet_id
                  ,sheet = 'weekly_share_lists'
-                 ,col_types = 'iccicinDcD'
+                 ,col_types = 'iccicinDcDc'
 )
 
 #Share Numbers tab
 sn = range_read(sheet_id
                 ,sheet = 'share_numbers'
-                ,col_types = 'icccicDcD'
+                ,col_types = 'icccicDcDc'
 )
 
 #Inventory Sales tab
@@ -55,7 +55,7 @@ sn = range_read(sheet_id
 #Sales Only tab
 so = range_read(sheet_id
                 ,sheet = 'sales_only'
-                ,col_types = 'icccDcD'
+                ,col_types = 'icccDcDc'
 )
 
 #Share List tab
@@ -109,7 +109,7 @@ fp_pivot_table = fp %>%
 #creating data set for time series (this could get large over time so potential efficiency improvement)
 ts_init <- sr %>% #obtain full week list
   filter(date <= fp_max & group_id != "skip") %>% 
-  select(week, date) %>% 
+  select(season_week, date) %>% 
   distinct() %>% 
   full_join(fp %>% #cross join weeks with full Item list
               filter(av_min > 0 | av_max > 0) %>% 
@@ -123,12 +123,12 @@ ts_init <- sr %>% #obtain full week list
               arrange(item, per)
             , by = character()) %>% 
   left_join(fp_pivot_table %>% #bring in availability for each Item
-              group_by(item, week) %>% 
+              group_by(item, season_week) %>% 
               summarise(availability = sum(availability),
                         order = sum(order)
                         ) %>%
               ungroup()
-            , by = c('week','item')) %>% 
+            , by = c('season_week','item')) %>% 
   mutate(availability = ifelse(is.na(availability), 0, availability),
          order = ifelse(is.na(order), 0, order)
          ) #fill in NAs with 0
@@ -208,7 +208,8 @@ ui <- fluidPage(
                sidebarPanel(
                  selectInput("mitem","Item*",mitem_list$item, multiple = TRUE, selected = 'Broccoli'),
                  h6("* Only a single Item can be selected at a time. 
-                    The Item List is based on Items from the Master List with a filter on Category.")
+                    The Item List is based on Items from the Master List with a filter on Category."),
+                 h6("In the 'Farmigo Sales' and 'Share Quantity' charts the column headers are populated as (season #).(week #)")
                ),
                
                # Show a plot of the generated distribution
@@ -282,7 +283,12 @@ server <- function(input, output, session) {
         dat <- datatable(df
                          , rownames = FALSE                      #remove row numbers
                          , class = 'cell-border stripe'          #add lines between rows/columns
-                         , options = list(dom = 'litip')) %>%    #DT dropdown / filter / entry count settings
+                         , options = list(dom = 'litip')         #DT dropdown / filter / entry count settings
+                         , caption = htmltools::tags$caption(
+                           style = 'caption-side: top; text-align: center;'
+                           ,'Available Amount'
+                         )
+                        ) %>% 
           formatStyle(
             names(df)
             , backgroundColor = styleInterval(c(1), c('azure2', 'seagreen'))   #updating color background of each cell
@@ -316,7 +322,12 @@ server <- function(input, output, session) {
         dat <- datatable(df
                          , rownames = FALSE                      #remove row numbers
                          , class = 'cell-border stripe'          #add lines between rows/columns
-                         , options = list(dom = 'litip')) %>%    #DT dropdown / filter / entry count settings
+                         , options = list(dom = 'litip')         #DT dropdown / filter / entry count settings
+                         , caption = htmltools::tags$caption(
+                           style = 'caption-side: top; text-align: center;'
+                           ,'Order Amount'
+                         )
+                         ) %>% 
           formatStyle(
             names(df)
             , backgroundColor = styleInterval(c(1), c('azure2', 'seagreen'))   #updating color background of each cell
@@ -329,8 +340,8 @@ server <- function(input, output, session) {
           group_by(farm, item) %>% 
           summarise(order = sum(order),
                     availability = sum(availability)) %>% 
-          mutate(oa_percent = ifelse((is.na(availability)| availability==0) & order > 0, 1,
-                                     ifelse((is.na(availability)| availability==0) , 0, order / availability))
+          mutate(oa_percent = round(ifelse((is.na(availability)| availability==0) & order > 0, 1,
+                                     ifelse((is.na(availability)| availability==0) , 0, order / availability)),2) *100
                     ) %>%
           ungroup() %>% 
           filter(oa_percent != 0) %>% 
@@ -352,16 +363,21 @@ server <- function(input, output, session) {
           rename(Item = item) %>% 
           replace(is.na(.), 0) 
         
-        dat <- datatable(df %>% 
-                           mutate_at(vars(-Item), funs(. %>% round(2) %>% scales::percent()))
+        dat <- datatable(df #%>% 
+                           #mutate_at(vars(-Item), funs(. %>% round(2) %>% scales::percent())) #formatstyle not working correctly when scales::percent added
                          , rownames = FALSE                      #remove row numbers
                          , class = 'cell-border stripe'          #add lines between rows/columns
-                         , options = list(dom = 'litip')) %>%    #DT dropdown / filter / entry count settings
+                         , options = list(dom = 'litip')         #DT dropdown / filter / entry count settings
+                         , caption = htmltools::tags$caption(
+                           style = 'caption-side: top; text-align: center;'
+                           ,'Order / Available (%)'
+                         )
+                         ) %>%    
           formatStyle(
             names(df
                   )
-            , backgroundColor = styleInterval(c(0.000002), c('azure2', 'seagreen'))   #updating color background of each cell
-            , color = styleInterval(c(0.000002), c('black', 'white'))                 #updating text color of each cell
+            , backgroundColor = styleInterval(c(1), c('azure2', 'seagreen'))   #updating color background of each cell
+            , color = styleInterval(c(1), c('black', 'white'))                 #updating text color of each cell
             , textAlign = 'center'
           )
 
@@ -490,27 +506,27 @@ server <- function(input, output, session) {
       distinct() %>% 
       full_join(sr %>% #obtain full week list
                   filter(date <= fp_max & group_id != "skip") %>% 
-                  select(week) %>% 
+                  select(season_week) %>% 
                   distinct()
                 , by = character()
       ) %>% 
       left_join(so %>%  
                   filter(sold != '') %>% 
                   filter(item %in% input$mitem) %>%
-                  select(week, item, sold) %>% 
+                  select(season_week, item, sold) %>% 
                   distinct()
-                , by = c('week','item')
+                , by = c('season_week','item')
       ) %>% 
-      arrange(desc(week)) %>% 
+      arrange(desc(season_week)) %>% 
       mutate(item = str_replace_all(str_replace_all(item,' ', ''),'-','_'),
-             week = as.character(week),
+             season_week = as.character(season_week),
              sold = as.character(sold),
              '_' = NA) %>% 
       rename(Item = item) %>% 
-      select('_', Item, week, sold)
+      select('_', Item, season_week, sold)
     
     dt_ft = dt %>% 
-      pivot_wider(names_from = week, values_from = sold) %>% 
+      pivot_wider(names_from = season_week, values_from = sold) %>% 
       replace(is.na(.), '') 
     
     dat <- datatable(dt_ft
@@ -524,7 +540,7 @@ server <- function(input, output, session) {
       formatStyle(
         names(dt %>% 
                 mutate(sold = ifelse(sold != '', 1, 0)) %>% 
-                pivot_wider(names_from = week, values_from = sold) %>% 
+                pivot_wider(names_from = season_week, values_from = sold) %>% 
                 mutate(Item = NA) %>% 
                 replace(is.na(.), 0)
         )
@@ -554,7 +570,7 @@ server <- function(input, output, session) {
                 ) %>% 
       full_join(sr %>% #obtain full week list
                   filter(date <= fp_max & group_id != "skip") %>% 
-                  select(week) %>% 
+                  select(season_week) %>% 
                   distinct()
                 , by = character()
       ) %>% 
@@ -562,31 +578,31 @@ server <- function(input, output, session) {
                   filter(!is.na(item) & !is.na(amt_share) & !is.na(prcnt_amnt)) %>% 
                   filter(item %in% input$mitem) %>%
                   left_join(sn %>% 
-                              group_by(week, group_id) %>% 
+                              group_by(season_week, group_id) %>% 
                               summarise(members = sum(members)) %>% 
                               ungroup()
-                            , by = c('week','group_id')
+                            , by = c('season_week','group_id')
                   ) %>% 
                   mutate(member_actual = ceiling(prcnt_amnt*members),
                          member_val = ifelse(member_actual != members, 1, 0)
                   ) %>% 
-                  group_by(week, item, group_id) %>% 
+                  group_by(season_week, item, group_id) %>% 
                   summarise(member_actual = sum(member_actual),
                             member_val = sum(member_val),
                             ttl_members = max(members)) %>% 
                   ungroup() 
-                , by = c('week','item','group_id')
+                , by = c('season_week','item','group_id')
       ) 
     dt_gt <- dt %>% 
       mutate(member_prct = round((member_actual / ttl_members)*100),
         member_val = ifelse(member_val > 0, paste0(member_actual, '(',member_prct,'%)'), member_actual)
         ) %>% 
-      select(week, group_id, item, member_val) %>% 
-      arrange(desc(week)) %>% 
+      select(season_week, group_id, item, member_val) %>% 
+      arrange(desc(season_week)) %>% 
       # select(-item) %>% 
-      mutate(week = as.character(week),
+      mutate(season_week = as.character(season_week),
              member_val = as.character(member_val)) %>% 
-      pivot_wider(names_from = week, values_from = member_val) %>% 
+      pivot_wider(names_from = season_week, values_from = member_val) %>% 
       arrange(group_id, item) %>% 
       mutate(item = str_replace_all(str_replace_all(item,' ', ''),'-','_')) %>% 
       rename(G = group_id, Item = item) %>% 
@@ -602,12 +618,12 @@ server <- function(input, output, session) {
                      , options = list(dom = 't')) %>%    
       formatStyle(
         names(dt %>%
-                select(week, group_id, item, member_val = member_actual) %>%
-                arrange(desc(week)) %>%
+                select(season_week, group_id, item, member_val = member_actual) %>%
+                arrange(desc(season_week)) %>%
                 # select(-item) %>%
-                mutate(week = as.character(week),
+                mutate(season_week = as.character(season_week),
                        member_val = as.integer(member_val)) %>%
-                pivot_wider(names_from = week, values_from = member_val) %>%
+                pivot_wider(names_from = season_week, values_from = member_val) %>%
                 arrange(group_id, item) %>%
                 mutate(item = NA) %>% 
                 rename(G = group_id, Item = item) %>%
