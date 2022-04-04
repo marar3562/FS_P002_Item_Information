@@ -9,3 +9,6 @@
 
 # shinyapps.io
 rsconnect/
+
+# R history
+.Rhistory
