@@ -218,7 +218,7 @@ ui <- fluidPage(
                  div(tableOutput("infotable"), style = "height:290px;weight:300px")
                  , div(tableOutput("costtable"), style = "height:290px;weight:300px")
                              )
-                 ,style = "height:300px;"
+                 ,style = "height:310px;"
                )
                ,fluidRow(dataTableOutput("farmigotable"),style = "height:200px;overflow-x: scroll;")
                ,fluidRow(dataTableOutput("grouptable"),style = "height:550px;overflow-x: scroll;")
@@ -536,7 +536,9 @@ server <- function(input, output, session) {
                        style = 'caption-side: top; text-align: left;'
                        ,'Farmigo Sales'
                      )
-                     , options = list(dom = 't')) %>%    
+                     , options = list(dom = 't'
+                                      , pageLength = 1000)
+                     ) %>%    
       formatStyle(
         names(dt %>% 
                 mutate(sold = ifelse(sold != '', 1, 0)) %>% 
@@ -615,7 +617,9 @@ server <- function(input, output, session) {
                        style = 'caption-side: top; text-align: left;'
                        ,'Share Quantity - (%) means only for percentage of members'
                      )
-                     , options = list(dom = 't')) %>%    
+                     , options = list(dom = 't'
+                                      , pageLength = 1000)
+                     ) %>% 
       formatStyle(
         names(dt %>%
                 select(season_week, group_id, item, member_val = member_actual) %>%
