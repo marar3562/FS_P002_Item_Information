@@ -1,6 +1,8 @@
 # FS_P002_Item_Information
 It was determined that project 1 had too high of an aspiration. We were concerned farmer acceptance would be low and that the project entailed a lot of work with high risk.
 
+The finalized dashboard can be found here: [FS Item Information](https://rmargh.shinyapps.io/fairshares_item_information/)
+
 A new direction was formed with more focus on Fair Shares employee knowledge. 
 
 ## Requirements - High Level
