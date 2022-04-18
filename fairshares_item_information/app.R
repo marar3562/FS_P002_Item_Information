@@ -25,7 +25,7 @@ fp = range_read(sheet_id
 #Master Item List tab
 mil = range_read(sheet_id
                  ,sheet = 'master_item_list'
-                 ,col_types = 'cccccccnccDc'
+                 ,col_types = 'cccccccnccnDc'
 )
 
 #Share Rotation tab
