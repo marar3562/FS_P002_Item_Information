@@ -8,6 +8,7 @@ library(scales)
 library(bslib)
 library(thematic)
 library(showtext)
+library(shinyBS)
 
 #gs4_auth(cache = ".secrets") #used to achieve the secrets file
 
@@ -171,7 +172,11 @@ ui <- fluidPage(
   # Application title
   div(id = "page-top",
       fluidRow(img(src="logo.png", height="5%", width="5%"),
-               column(3, radioButtons("current_theme", "App Theme:", c("Dark" = "slate", "Light" = "flatly"), inline = TRUE))
+               column(3, radioButtons("current_theme", "App Theme:", c("Dark" = "slate", "Light" = "flatly"), inline = TRUE)
+                      ),
+               column(3, bsButton("showpanel", "Show/hide sidebar", type = "toggle", value = TRUE, size = "small")
+                      )
+                   
       )
   ),
   div(
@@ -179,52 +184,17 @@ ui <- fluidPage(
     titlePanel(title="Fair Shares Item Information"
                ,tags$head(tags$link(rel = "icon", type = "image/png", href = "logo.png"),
                          tags$title("FS Item Information"))
-               )
+               ),
+    
   ),
   
   tabsetPanel(
     tabPanel("Farmer Produce - Availability",
-             # Sidebar with a slider input for number of bins 
-             sidebarLayout(
-               sidebarPanel(
-                 dateRangeInput("daterange","Date Range",fp_min, fp_max),        #date range
-                 selectInput("mparameter","Matrix Parameter",matrix_parameter),  #matrix parameter
-                 selectInput("item","Item*",item_list$item, multiple = TRUE),    #item list
-                 h6("* The Time Series chart will only appear if an Item(s) is selected in the filter above.
-                    The Item List is based on the Farmer Produce List."),
-                 actionButton("update", "Click to Show Charts")               #allows data to update or not
-               ),
-               
-               # Show a plot of the generated distribution
-               mainPanel(
-                 h6("Farm Name Notes:  * = Primary,   ** = Primary - Specialty,   *** = Secondary,   **** = Secondary - Specialty"),
-                 dataTableOutput("farmer_item_table"),  #farmer availability pivot table
-                 plotOutput("item_timeseries")          #item availability time series plots
-               )
-             )
+             uiOutput('ui')
     ),
     tabPanel("Produce Item Search",
-             sidebarLayout(
-               sidebarPanel(
-                 selectInput("mitem","Item*",mitem_list$item, multiple = TRUE, selected = 'Broccoli'),
-                 h6("* Only a single Item can be selected at a time. 
-                    The Item List is based on Items from the Master List with a filter on Category."),
-                 h6("In the 'Farmigo Sales' and 'Share Quantity' charts the column headers are populated as (season #).(week #)")
-               ),
-               
-               # Show a plot of the generated distribution
-               mainPanel(fluidRow(
-                 splitLayout(cellWidths = c("50%", "50%"),
-                 div(tableOutput("infotable"), style = "height:290px;weight:300px")
-                 , div(tableOutput("costtable"), style = "height:290px;weight:300px")
-                             )
-                 ,style = "height:310px;"
-               )
-               ,fluidRow(dataTableOutput("farmigotable"),style = "height:200px;overflow-x: scroll;")
-               ,fluidRow(dataTableOutput("grouptable"),style = "height:550px;overflow-x: scroll;")
-               # ,verbatimTextOutput("test")
-               )
-             )
+             uiOutput('ui2')
+
     )
   )
   
@@ -232,6 +202,76 @@ ui <- fluidPage(
 
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
+  
+  output$ui <- renderUI({
+    if (input$showpanel) {
+      # Sidebar with a slider input for number of bins 
+      sidebarLayout(
+        sidebarPanel(
+          dateRangeInput("daterange","Date Range",fp_min, fp_max),        #date range
+          selectInput("mparameter","Matrix Parameter",matrix_parameter),  #matrix parameter
+          selectInput("item","Item*",item_list$item, multiple = TRUE),    #item list
+          h6("* The Time Series chart will only appear if an Item(s) is selected in the filter above.
+                    The Item List is based on the Farmer Produce List."),
+          actionButton("update", "Click to Show Charts")               #allows data to update or not
+        ),
+        
+        # Show a plot of the generated distribution
+        mainPanel(
+          h6("Farm Name Notes:  * = Primary,   ** = Primary - Specialty,   *** = Secondary,   **** = Secondary - Specialty"),
+          dataTableOutput("farmer_item_table"),  #farmer availability pivot table
+          plotOutput("item_timeseries")          #item availability time series plots
+        )
+      )
+    } else {
+      mainPanel(
+        h6("Farm Name Notes:  * = Primary,   ** = Primary - Specialty,   *** = Secondary,   **** = Secondary - Specialty"),
+        dataTableOutput("farmer_item_table"),  #farmer availability pivot table
+        plotOutput("item_timeseries")          #item availability time series plots
+      )
+    }
+  })
+  
+  output$ui2 <- renderUI({
+    if (input$showpanel) {
+      sidebarLayout(
+        sidebarPanel(
+          selectInput("mitem","Item*",mitem_list$item, multiple = TRUE, selected = 'Broccoli'),
+          h6("* Only a single Item can be selected at a time. 
+                    The Item List is based on Items from the Master List with a filter on Category."),
+          h6("In the 'Farmigo Sales' and 'Share Quantity' charts the column headers are populated as (season #).(week #)")
+        ),
+        
+        # Show a plot of the generated distribution
+        mainPanel(fluidRow(
+          splitLayout(cellWidths = c("50%", "50%"),
+                      div(tableOutput("infotable"), style = "height:290px;weight:300px")
+                      , div(tableOutput("costtable"), style = "height:290px;weight:300px")
+          )
+          ,style = "height:310px;"
+        )
+        ,fluidRow(dataTableOutput("farmigotable"),style = "height:200px;overflow-x: scroll;")
+        ,fluidRow(dataTableOutput("grouptable"),style = "height:550px;overflow-x: scroll;")
+        # ,verbatimTextOutput("test")
+        )
+      )
+    } else {
+      mainPanel(fluidRow(
+        splitLayout(cellWidths = c("50%", "50%"),
+                    div(tableOutput("infotable"), style = "height:290px;weight:300px")
+                    , div(tableOutput("costtable"), style = "height:290px;weight:300px")
+        )
+        ,style = "height:310px;"
+      )
+      ,fluidRow(dataTableOutput("farmigotable"),style = "height:200px;overflow-x: scroll;")
+      ,fluidRow(dataTableOutput("grouptable"),style = "height:550px;overflow-x: scroll;")
+      # ,verbatimTextOutput("test")
+      )
+    }
+  })
+  
+  
+  
   
   ##############  Farmer Produce - Availability tab  ############## 
   
