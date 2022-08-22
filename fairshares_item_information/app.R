@@ -62,7 +62,7 @@ so = range_read(sheet_id
 #Share List tab
 sl = range_read(sheet_id
                 ,sheet = 'share_list'
-                ,col_types = 'ccnDc'
+                ,col_types = 'ccniDc'
 )
 
 #Farmer List tab
