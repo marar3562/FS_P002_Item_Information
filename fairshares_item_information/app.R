@@ -1,5 +1,5 @@
 #
-# test 
+#
 
 library(googlesheets4)
 library(tidyverse)
@@ -157,6 +157,9 @@ mitem_list = milc %>%
 #Parameter filter list for Matrix
 matrix_parameter = c('Available','Ordered','Ordered / Available')
 
+# setting an example item field for the Item Detail tab
+ex_item = 'Broccoli'
+
 ##Theme Setup
 # Setting Theme (https://shiny.rstudio.com/app-stories/weather-lookup-bslib.html)
 my_theme <- bs_theme(bootswatch = "slate",
@@ -213,7 +216,7 @@ server <- function(input, output, session) {
           selectInput("item","Item*",item_list$item, multiple = TRUE),    #item list
           h6("* The Time Series chart will only appear if an Item(s) is selected in the filter above.
                     The Item List is based on the Farmer Produce List."),
-          actionButton("update", "Click to Show Charts")               #allows data to update or not
+          actionButton("update_av", "Click to Show Charts")               #allows data to update or not
         ),
         
         # Show a plot of the generated distribution
@@ -236,9 +239,9 @@ server <- function(input, output, session) {
     if (input$showpanel) {
       sidebarLayout(
         sidebarPanel(
-          selectInput("mitem","Item*",mitem_list$item, multiple = TRUE, selected = 'Broccoli'),
-          h6("* Only a single Item can be selected at a time. 
-                    The Item List is based on Items from the Master List with a filter on Category."),
+          selectInput("mitem","Item*",mitem_list$item, multiple = TRUE, selected = ex_item),
+          actionButton("update_it", "Click to Show Results"),               #allows data to update or not
+          h6("* The Item List is based on Items from the Master List with a filter on Category."),
           h6("In the 'Farmigo Sales' and 'Share Quantity' charts the column headers are populated as (season #).(week #)")
         ),
         
@@ -278,7 +281,7 @@ server <- function(input, output, session) {
   fmatrix = reactiveValues(data = NULL)
   timeseries = reactiveValues(data = NULL)
   
-  observeEvent(input$update, {
+  observeEvent(input$update_av, {
     if (is.null(input$item)) { #only update matrix if item filter is blank
       fmatrix$data = fp_pivot_table %>%
         filter(date >= format(input$daterange[1]) & date <= format(input$daterange[2]))
@@ -478,9 +481,43 @@ server <- function(input, output, session) {
   
   
   ##############  Produce Item Search tab  ############## 
+  
+  item_button_df = reactiveValues(data = milc %>%
+                                    filter(item %in% ex_item))
+  item_button_df_fp = reactiveValues(data = fp %>%
+                                       filter(item %in% ex_item))
+  item_button_df_so = reactiveValues(data = so %>%
+                                       filter(item %in% ex_item))
+  item_button_df_wsl = reactiveValues(data = wsl %>%
+                                        filter(item %in% ex_item))
+  
+  # Only update tables if button pressed
+  observeEvent(input$update_it, {
+    if (is.null(input$mitem)) { #only update data frame if item filter is not blank
+      item_button_df$data = milc %>%
+        filter(item %in% "ahksdaobohafb") #using gibberish so that no data is returned
+      item_button_df_fp$data = fp %>%
+        filter(item %in% "ahksdaobohafb") #using gibberish so that no data is returned
+      item_button_df_so$data = so %>%
+        filter(item %in% "ahksdaobohafb") #using gibberish so that no data is returned
+      item_button_df_wsl$data = wsl %>%
+        filter(item %in% "ahksdaobohafb") #using gibberish so that no data is returned
+    } else {
+      item_button_df$data = milc %>%
+        filter(item %in% input$mitem)
+      item_button_df_fp$data = fp %>%
+        filter(item %in% input$mitem)
+      item_button_df_so$data = so %>%
+        filter(item %in% input$mitem)
+      item_button_df_wsl$data = wsl %>%
+        filter(item %in% input$mitem)
+    }
+    
+  })
+  
+  
   output$infotable <- renderTable({
-    milc %>% 
-      filter(item %in% input$mitem) %>% 
+    item_button_df$data %>% 
       select(item, category, per = preferred_per_value, Note = farmer_dashboard_notes) %>% 
       mutate(n = row_number(),
              Note = ifelse(is.na(Note), 'FILL ME IN PLEASE!!!', Note)) %>%
@@ -504,27 +541,24 @@ server <- function(input, output, session) {
   }) 
   
   output$costtable <- renderTable({
-    fp %>% 
+    item_button_df_fp$data %>% 
       mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
       filter(!is.na(availability) & !is.na(cost)) %>% 
-      filter(item %in% input$mitem) %>% 
       group_by(item, cost) %>% 
       summarise(count = n()) %>% 
       arrange(item, desc(cost)) %>% 
       ungroup() %>% 
-      left_join(fp %>% 
+      left_join(item_button_df_fp$data %>% 
                   mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
-                  filter(item %in% input$mitem) %>% 
                   filter(!is.na(availability) & !is.na(cost)) %>% 
                   group_by(item) %>% 
                   summarise(ttl_count = n()) %>% 
                   ungroup()
                 , by = c('item')
       ) %>% 
-      left_join(fp %>% 
+      left_join(item_button_df_fp$data %>% 
                   mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
                   filter(!is.na(availability) & !is.na(cost)) %>% 
-                  filter(item %in% input$mitem) %>% 
                   group_by(item) %>% 
                   summarise(max_cost = max(cost)) %>% 
                   ungroup()
@@ -540,8 +574,7 @@ server <- function(input, output, session) {
   })
   
   output$farmigotable <- renderDataTable({
-    dt <- milc %>% 
-      filter(item %in% input$mitem) %>%
+    dt <- item_button_df$data %>% 
       select(item) %>% 
       distinct() %>% 
       full_join(sr %>% #obtain full week list
@@ -550,9 +583,8 @@ server <- function(input, output, session) {
                   distinct()
                 , by = character()
       ) %>% 
-      left_join(so %>%  
+      left_join(item_button_df_so$data %>%  
                   filter(sold != '') %>% 
-                  filter(item %in% input$mitem) %>%
                   select(season_week, item, sold) %>% 
                   distinct()
                 , by = c('season_week','item')
@@ -597,13 +629,11 @@ server <- function(input, output, session) {
       filter(!is.na(group_id)) %>% 
       select(group_id) %>% 
       distinct() %>%
-      left_join(milc %>% #join in the items that have been in shares to associated groups
-                  filter(item %in% input$mitem) %>%
+      left_join(item_button_df$data %>% #join in the items that have been in shares to associated groups
                   select(item) %>% 
                   distinct() %>% 
-                  inner_join(wsl %>%  
+                  inner_join(item_button_df_wsl$data %>%  
                                filter(!is.na(item) & !is.na(amt_share) & !is.na(prcnt_amnt)) %>% 
-                               filter(item %in% input$mitem) %>% 
                                select(item, group_id) %>% 
                                distinct()
                              , by = c('item')
@@ -616,9 +646,8 @@ server <- function(input, output, session) {
                   distinct()
                 , by = character()
       ) %>% 
-      left_join(wsl %>%  #bring in member information
+      left_join(item_button_df_wsl$data %>%  #bring in member information
                   filter(!is.na(item) & !is.na(amt_share) & !is.na(prcnt_amnt)) %>% 
-                  filter(item %in% input$mitem) %>%
                   left_join(sn %>% 
                               group_by(season_week, group_id) %>% 
                               summarise(members = sum(members)) %>% 
