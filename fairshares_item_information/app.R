@@ -174,12 +174,11 @@ ui <- fluidPage(
   
   # Application title
   div(id = "page-top",
-      fluidRow(img(src="logo.png", height="5%", width="5%"),
+      fluidRow(tags$img(src="logo.png", style = "width: 100px"), 
                column(3, radioButtons("current_theme", "App Theme:", c("Dark" = "slate", "Light" = "flatly"), inline = TRUE)
                       ),
                column(3, bsButton("showpanel", "Show/hide sidebar", type = "toggle", value = TRUE, size = "small")
                       )
-                   
       )
   ),
   div(
