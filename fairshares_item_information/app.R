@@ -437,42 +437,39 @@ server <- function(input, output, session) {
     if (is.null(timeseries$data)) {
       return()
     } else {
+      
       if (input$mparameter == 'Available') {
-        ts <- timeseries$data %>%
-          select(-order) %>% 
-          filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) %>%
-          ggplot(aes(x=date, y=availability)) +
-          geom_point(color = c('seagreen')) +
-          geom_line(color = c('seagreen')) +
-          facet_grid(item + per~.)
+        ts_init <- timeseries$data |> 
+          select(date, item, per, value = availability)
         
       } else if (input$mparameter == 'Ordered') {
-        ts <- timeseries$data %>%
-          select(-availability) %>% 
-          filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) %>%
-          ggplot(aes(x=date, y=order)) +
-          geom_point(color = c('seagreen')) +
-          geom_line(color = c('seagreen')) +
-          facet_grid(item + per~.)
+          ts_init <- timeseries$data |> 
+            select(date, item, per, value = order) 
         
       } else if (input$mparameter == 'Ordered / Available') {
-        ts <- timeseries$data %>%
+        ts_init <- timeseries$data |> 
           mutate(oa_percent = ifelse((is.na(availability)| availability==0) & order > 0, 1,
-                                 ifelse((is.na(availability)| availability==0) , 0, order / availability))
-                 ) %>% 
-          select(-order, -availability) %>% 
-          filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) %>%
-          ggplot(aes(x=date, y=oa_percent)) +
-          geom_point(color = c('seagreen')) +
-          geom_line(color = c('seagreen')) +
-          ylab('Order / Available (%)') +
-          facet_grid(item + per~.) + 
-          scale_y_continuous(labels = scales::percent_format(scale = 100))
+                                     ifelse((is.na(availability)| availability==0) , 0, order / availability))
+          ) |>  
+          select(date, item, per, value = oa_percent) 
         
       } else {
         return()
       }
       
+      ts <- ts_init |> 
+        filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) |> 
+        ggplot(aes(x=date, y=value)) +
+        geom_point(color = c('seagreen')) +
+        geom_line(color = c('seagreen')) +
+        facet_grid(item + per~.) +
+        ylab(input$mparameter)
+      
+      if (input$mparameter == 'Ordered / Available') {
+        ts <- ts +
+          scale_y_continuous(labels = scales::percent_format(scale = 100))
+      }
+
       return(ts)
     }
   })
