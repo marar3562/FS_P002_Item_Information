@@ -213,6 +213,7 @@ server <- function(input, output, session) {
           dateRangeInput("daterange","Date Range",fp_min, fp_max),        #date range
           selectInput("mparameter","Matrix Parameter",matrix_parameter),  #matrix parameter
           selectInput("item","Item*",item_list$item, multiple = TRUE),    #item list
+          checkboxInput("combine_data", "Combine Items?",TRUE),           #allow to combine all items in all charts 
           h6("* The Time Series chart will only appear if an Item(s) is selected in the filter above.
                     The Item List is based on the Farmer Produce List."),
           actionButton("update_av", "Click to Show Charts")               #allows data to update or not
@@ -317,11 +318,23 @@ server <- function(input, output, session) {
                                                     ifelse(detail == 'Secondary - Specialty', paste0(farm,'****'),farm)))))
           ) %>% 
           select(-detail) %>% 
-          pivot_wider(names_from = farm, values_from = availability) %>% 
-          arrange(item) %>% 
-          rename(Item = item) %>% 
+          pivot_wider(names_from = farm, values_from = availability) %>%
+          arrange(item) %>%
+          rename(Item = item) %>%
           replace(is.na(.), 0)
         
+        ## attempt at combining the dataframe. Had lots of issues so needs further testing! 
+        # if (input$combine_date == TRUE) {
+        #   df <- df %>% 
+        #     rbind(
+        #       df %>% 
+        #         group_by(farm) %>% 
+        #         summarise(availability = sum(availability)) %>% 
+        #         ungroup() %>% 
+        #         mutate(item = '__Combine All__')
+        #     )
+        # }
+
         dat <- datatable(df
                          , rownames = FALSE                      #remove row numbers
                          , class = 'cell-border stripe'          #add lines between rows/columns
