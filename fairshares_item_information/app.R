@@ -9,6 +9,7 @@ library(bslib)
 library(thematic)
 library(showtext)
 library(shinyBS)
+library(lubridate)
 
 #gs4_auth(cache = ".secrets") #used to achieve the secrets file
 
@@ -213,7 +214,9 @@ server <- function(input, output, session) {
           dateRangeInput("daterange","Date Range",fp_min, fp_max),        #date range
           selectInput("mparameter","Matrix Parameter",matrix_parameter),  #matrix parameter
           selectInput("item","Item*",item_list$item, multiple = TRUE),    #item list
-          checkboxInput("combine_data", "Combine Items?",TRUE),           #allow to combine all items in all charts 
+          radioButtons("chart_type", "Chart Type", c("line", "bar"), "line"), #allow pick the chart type 
+          radioButtons("date_aggr", "Date Aggregaton", c("week", "month"), "week"), #pick granularity of aggregation
+          checkboxInput("combine_data", "Combine Items?",FALSE),           #allow to combine all items in all charts 
           h6("* The Time Series chart will only appear if an Item(s) is selected in the filter above.
                     The Item List is based on the Farmer Produce List."),
           actionButton("update_av", "Click to Show Charts")               #allows data to update or not
@@ -451,36 +454,107 @@ server <- function(input, output, session) {
       return()
     } else {
       
-      if (input$mparameter == 'Available') {
-        ts_init <- timeseries$data |> 
-          select(date, item, per, value = availability)
-        
-      } else if (input$mparameter == 'Ordered') {
-          ts_init <- timeseries$data |> 
-            select(date, item, per, value = order) 
-        
-      } else if (input$mparameter == 'Ordered / Available') {
-        ts_init <- timeseries$data |> 
-          mutate(oa_percent = ifelse((is.na(availability)| availability==0) & order > 0, 1,
-                                     ifelse((is.na(availability)| availability==0) , 0, order / availability))
-          ) |>  
-          select(date, item, per, value = oa_percent) 
-        
+      if (input$date_aggr == "month") {
+        ts_date_aggr =  timeseries$data |> 
+          mutate(date = floor_date(date, 'month'))
       } else {
-        return()
+        ts_date_aggr =  timeseries$data
       }
       
-      ts <- ts_init |> 
-        filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) |> 
-        ggplot(aes(x=date, y=value)) +
-        geom_point(color = c('seagreen')) +
-        geom_line(color = c('seagreen')) +
-        facet_grid(item + per~.) +
-        ylab(input$mparameter)
-      
-      if (input$mparameter == 'Ordered / Available') {
-        ts <- ts +
-          scale_y_continuous(labels = scales::percent_format(scale = 100))
+      if (input$combine_data == TRUE) {
+        if (input$mparameter == 'Available') {
+          ts_init <- ts_date_aggr |> 
+            group_by(date) |> 
+            summarise(value = sum(availability)) |> 
+            ungroup()
+          
+        } else if (input$mparameter == 'Ordered') {
+          ts_init <- ts_date_aggr |> 
+            group_by(date) |> 
+            summarise(value = sum(order)) |> 
+            ungroup()
+          
+        } else if (input$mparameter == 'Ordered / Available') {
+          ts_init <- ts_date_aggr |> 
+            group_by(date) |> 
+            summarise(availability = sum(availability),
+                      order = sum(order)) |> 
+            mutate(oa_percent = ifelse((is.na(availability)| availability==0) & order > 0, 1,
+                                       ifelse((is.na(availability)| availability==0) , 0, order / availability)) 
+            ) |>  
+            select(date, value = oa_percent) 
+          
+        } else {
+          return()
+        }
+        
+        if (input$chart_type == "bar") {
+          ts <- ts_init |> 
+            ggplot(aes(x=date, y=value)) +
+            geom_col(color = c('seagreen')) +
+            ylab(input$mparameter)
+        } else {
+          ts <- ts_init |> 
+            ggplot(aes(x=date, y=value)) +
+            geom_point(color = c('seagreen')) +
+            geom_line(color = c('seagreen')) +
+            ylab(input$mparameter)
+        }
+        
+        
+        if (input$mparameter == 'Ordered / Available') {
+          ts <- ts +
+            scale_y_continuous(labels = scales::percent_format(scale = 100))
+        }
+      } else {
+        if (input$mparameter == 'Available') {
+          ts_init <- ts_date_aggr |> 
+            group_by(date, item, per) |> 
+            summarise(value = sum(availability)) |> 
+            ungroup()
+          
+        } else if (input$mparameter == 'Ordered') {
+          ts_init <- ts_date_aggr |> 
+            group_by(date, item, per) |> 
+            summarise(value = sum(order)) |> 
+            ungroup()
+          
+        } else if (input$mparameter == 'Ordered / Available') {
+          ts_init <- ts_date_aggr |> 
+            group_by(date, item, per) |> 
+            summarise(availability = sum(availability),
+                      order = sum(order)) |> 
+            ungroup() |> 
+            mutate(oa_percent = ifelse((is.na(availability)| availability==0) & order > 0, 1,
+                                       ifelse((is.na(availability)| availability==0) , 0, order / availability))
+            ) |>  
+            select(date, item, per, value = oa_percent) 
+          
+        } else {
+          return()
+        }
+        
+        if (input$chart_type == "bar") {
+          ts <- ts_init |> 
+            filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) |> 
+            ggplot(aes(x=date, y=value)) +
+            geom_col(color = c('seagreen')) +
+            facet_grid(item + per~.) +
+            ylab(input$mparameter)
+        } else {
+          ts <- ts_init |> 
+            filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) |> 
+            ggplot(aes(x=date, y=value)) +
+            geom_point(color = c('seagreen')) +
+            geom_line(color = c('seagreen')) +
+            facet_grid(item + per~.) +
+            ylab(input$mparameter)
+        }
+
+        if (input$mparameter == 'Ordered / Available') {
+          ts <- ts +
+            scale_y_continuous(labels = scales::percent_format(scale = 100))
+        }
       }
 
       return(ts)
