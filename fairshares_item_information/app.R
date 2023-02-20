@@ -11,7 +11,7 @@ library(showtext)
 library(shinyBS)
 library(lubridate)
 
-#gs4_auth(cache = ".secrets") #used to achieve the secrets file
+# gs4_auth(cache = ".secrets") #used to achieve the secrets file
 
 gs4_auth(cache = ".secrets", email = TRUE, use_oob = TRUE) #use in shinyapps prod to connect to data
 #gs4_auth(email = "")
