@@ -113,7 +113,7 @@ ts_init <- sr %>% #obtain full week list
   filter(date <= fp_max & group_id != "skip") %>% 
   select(season_week, date) %>% 
   distinct() %>% 
-  full_join(fp %>% #cross join weeks with full Item list
+  cross_join(fp %>% #cross join weeks with full Item list
               filter(av_min > 0 | av_max > 0) %>% 
               select(item) %>% 
               distinct() %>% 
@@ -123,7 +123,7 @@ ts_init <- sr %>% #obtain full week list
                         , by = c('item')
               ) %>% 
               arrange(item, per)
-            , by = character()) %>% 
+            ) %>% #, by = character()
   left_join(fp_pivot_table %>% #bring in availability for each Item
               group_by(item, season_week) %>% 
               summarise(availability = sum(availability),
@@ -660,11 +660,11 @@ server <- function(input, output, session) {
     dt <- item_button_df$data %>% 
       select(item) %>% 
       distinct() %>% 
-      full_join(sr %>% #obtain full week list
+      cross_join(sr %>% #obtain full week list
                   filter(date <= fp_max & group_id != "skip") %>% 
                   select(season_week) %>% 
                   distinct()
-                , by = character()
+                #, by = character()
       ) %>% 
       left_join(item_button_df_so$data %>%  
                   filter(sold != '') %>% 
@@ -723,11 +723,11 @@ server <- function(input, output, session) {
                              )
                 , by = c('group_id')
                 ) %>% 
-      full_join(sr %>% #obtain full week list
+      cross_join(sr %>% #obtain full week list
                   filter(date <= fp_max & group_id != "skip") %>% 
                   select(season_week) %>% 
                   distinct()
-                , by = character()
+                #, by = character()
       ) %>% 
       left_join(item_button_df_wsl$data %>%  #bring in member information
                   filter(!is.na(item) & !is.na(amt_share) & !is.na(prcnt_amnt)) %>% 
