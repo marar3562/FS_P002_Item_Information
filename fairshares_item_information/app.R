@@ -1,5 +1,5 @@
 #
-# 
+#
 
 library(googlesheets4)
 library(tidyverse)
@@ -9,8 +9,9 @@ library(bslib)
 library(thematic)
 library(showtext)
 library(shinyBS)
+library(lubridate)
 
-#gs4_auth(cache = ".secrets") #used to achieve the secrets file
+# gs4_auth(cache = ".secrets") #used to achieve the secrets file
 
 gs4_auth(cache = ".secrets", email = TRUE, use_oob = TRUE) #use in shinyapps prod to connect to data
 #gs4_auth(email = "")
@@ -112,7 +113,7 @@ ts_init <- sr %>% #obtain full week list
   filter(date <= fp_max & group_id != "skip") %>% 
   select(season_week, date) %>% 
   distinct() %>% 
-  full_join(fp %>% #cross join weeks with full Item list
+  cross_join(fp %>% #cross join weeks with full Item list
               filter(av_min > 0 | av_max > 0) %>% 
               select(item) %>% 
               distinct() %>% 
@@ -122,7 +123,7 @@ ts_init <- sr %>% #obtain full week list
                         , by = c('item')
               ) %>% 
               arrange(item, per)
-            , by = character()) %>% 
+            ) %>% #, by = character()
   left_join(fp_pivot_table %>% #bring in availability for each Item
               group_by(item, season_week) %>% 
               summarise(availability = sum(availability),
@@ -157,6 +158,9 @@ mitem_list = milc %>%
 #Parameter filter list for Matrix
 matrix_parameter = c('Available','Ordered','Ordered / Available')
 
+# setting an example item field for the Item Detail tab
+ex_item = 'Broccoli'
+
 ##Theme Setup
 # Setting Theme (https://shiny.rstudio.com/app-stories/weather-lookup-bslib.html)
 my_theme <- bs_theme(bootswatch = "slate",
@@ -171,12 +175,11 @@ ui <- fluidPage(
   
   # Application title
   div(id = "page-top",
-      fluidRow(img(src="logo.png", height="5%", width="5%"),
+      fluidRow(tags$img(src="logo.png", style = "width: 100px"), # width = "5%", height = "5%" # old R version
                column(3, radioButtons("current_theme", "App Theme:", c("Dark" = "slate", "Light" = "flatly"), inline = TRUE)
                       ),
                column(3, bsButton("showpanel", "Show/hide sidebar", type = "toggle", value = TRUE, size = "small")
                       )
-                   
       )
   ),
   div(
@@ -211,9 +214,12 @@ server <- function(input, output, session) {
           dateRangeInput("daterange","Date Range",fp_min, fp_max),        #date range
           selectInput("mparameter","Matrix Parameter",matrix_parameter),  #matrix parameter
           selectInput("item","Item*",item_list$item, multiple = TRUE),    #item list
+          radioButtons("chart_type", "Chart Type", c("line", "bar"), "line"), #allow pick the chart type 
+          radioButtons("date_aggr", "Date Aggregaton", c("week", "month"), "week"), #pick granularity of aggregation
+          checkboxInput("combine_data", "Combine Items?",FALSE),           #allow to combine all items in all charts 
           h6("* The Time Series chart will only appear if an Item(s) is selected in the filter above.
                     The Item List is based on the Farmer Produce List."),
-          actionButton("update", "Click to Show Charts")               #allows data to update or not
+          actionButton("update_av", "Click to Show Charts")               #allows data to update or not
         ),
         
         # Show a plot of the generated distribution
@@ -236,9 +242,9 @@ server <- function(input, output, session) {
     if (input$showpanel) {
       sidebarLayout(
         sidebarPanel(
-          selectInput("mitem","Item*",mitem_list$item, multiple = TRUE, selected = 'Broccoli'),
-          h6("* Only a single Item can be selected at a time. 
-                    The Item List is based on Items from the Master List with a filter on Category."),
+          selectInput("mitem","Item*",mitem_list$item, multiple = TRUE, selected = ex_item),
+          actionButton("update_it", "Click to Show Results"),               #allows data to update or not
+          h6("* The Item List is based on Items from the Master List with a filter on Category."),
           h6("In the 'Farmigo Sales' and 'Share Quantity' charts the column headers are populated as (season #).(week #)")
         ),
         
@@ -278,7 +284,7 @@ server <- function(input, output, session) {
   fmatrix = reactiveValues(data = NULL)
   timeseries = reactiveValues(data = NULL)
   
-  observeEvent(input$update, {
+  observeEvent(input$update_av, {
     if (is.null(input$item)) { #only update matrix if item filter is blank
       fmatrix$data = fp_pivot_table %>%
         filter(date >= format(input$daterange[1]) & date <= format(input$daterange[2]))
@@ -315,11 +321,23 @@ server <- function(input, output, session) {
                                                     ifelse(detail == 'Secondary - Specialty', paste0(farm,'****'),farm)))))
           ) %>% 
           select(-detail) %>% 
-          pivot_wider(names_from = farm, values_from = availability) %>% 
-          arrange(item) %>% 
-          rename(Item = item) %>% 
+          pivot_wider(names_from = farm, values_from = availability) %>%
+          arrange(item) %>%
+          rename(Item = item) %>%
           replace(is.na(.), 0)
         
+        ## attempt at combining the dataframe. Had lots of issues so needs further testing! 
+        # if (input$combine_date == TRUE) {
+        #   df <- df %>% 
+        #     rbind(
+        #       df %>% 
+        #         group_by(farm) %>% 
+        #         summarise(availability = sum(availability)) %>% 
+        #         ungroup() %>% 
+        #         mutate(item = '__Combine All__')
+        #     )
+        # }
+
         dat <- datatable(df
                          , rownames = FALSE                      #remove row numbers
                          , class = 'cell-border stripe'          #add lines between rows/columns
@@ -435,42 +453,110 @@ server <- function(input, output, session) {
     if (is.null(timeseries$data)) {
       return()
     } else {
-      if (input$mparameter == 'Available') {
-        ts <- timeseries$data %>%
-          select(-order) %>% 
-          filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) %>%
-          ggplot(aes(x=date, y=availability)) +
-          geom_point(color = c('seagreen')) +
-          geom_line(color = c('seagreen')) +
-          facet_grid(item + per~.)
-        
-      } else if (input$mparameter == 'Ordered') {
-        ts <- timeseries$data %>%
-          select(-availability) %>% 
-          filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) %>%
-          ggplot(aes(x=date, y=order)) +
-          geom_point(color = c('seagreen')) +
-          geom_line(color = c('seagreen')) +
-          facet_grid(item + per~.)
-        
-      } else if (input$mparameter == 'Ordered / Available') {
-        ts <- timeseries$data %>%
-          mutate(oa_percent = ifelse((is.na(availability)| availability==0) & order > 0, 1,
-                                 ifelse((is.na(availability)| availability==0) , 0, order / availability))
-                 ) %>% 
-          select(-order, -availability) %>% 
-          filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) %>%
-          ggplot(aes(x=date, y=oa_percent)) +
-          geom_point(color = c('seagreen')) +
-          geom_line(color = c('seagreen')) +
-          ylab('Order / Available (%)') +
-          facet_grid(item + per~.) + 
-          scale_y_continuous(labels = scales::percent_format(scale = 100))
-        
+      
+      if (input$date_aggr == "month") {
+        ts_date_aggr =  timeseries$data |> 
+          mutate(date = floor_date(date, 'month'))
       } else {
-        return()
+        ts_date_aggr =  timeseries$data
       }
       
+      if (input$combine_data == TRUE) {
+        if (input$mparameter == 'Available') {
+          ts_init <- ts_date_aggr |> 
+            group_by(date) |> 
+            summarise(value = sum(availability)) |> 
+            ungroup()
+          
+        } else if (input$mparameter == 'Ordered') {
+          ts_init <- ts_date_aggr |> 
+            group_by(date) |> 
+            summarise(value = sum(order)) |> 
+            ungroup()
+          
+        } else if (input$mparameter == 'Ordered / Available') {
+          ts_init <- ts_date_aggr |> 
+            group_by(date) |> 
+            summarise(availability = sum(availability),
+                      order = sum(order)) |> 
+            mutate(oa_percent = ifelse((is.na(availability)| availability==0) & order > 0, 1,
+                                       ifelse((is.na(availability)| availability==0) , 0, order / availability)) 
+            ) |>  
+            select(date, value = oa_percent) 
+          
+        } else {
+          return()
+        }
+        
+        if (input$chart_type == "bar") {
+          ts <- ts_init |> 
+            ggplot(aes(x=date, y=value)) +
+            geom_col(color = c('seagreen')) +
+            ylab(input$mparameter)
+        } else {
+          ts <- ts_init |> 
+            ggplot(aes(x=date, y=value)) +
+            geom_point(color = c('seagreen')) +
+            geom_line(color = c('seagreen')) +
+            ylab(input$mparameter)
+        }
+        
+        
+        if (input$mparameter == 'Ordered / Available') {
+          ts <- ts +
+            scale_y_continuous(labels = scales::percent_format(scale = 100))
+        }
+      } else {
+        if (input$mparameter == 'Available') {
+          ts_init <- ts_date_aggr |> 
+            group_by(date, item, per) |> 
+            summarise(value = sum(availability)) |> 
+            ungroup()
+          
+        } else if (input$mparameter == 'Ordered') {
+          ts_init <- ts_date_aggr |> 
+            group_by(date, item, per) |> 
+            summarise(value = sum(order)) |> 
+            ungroup()
+          
+        } else if (input$mparameter == 'Ordered / Available') {
+          ts_init <- ts_date_aggr |> 
+            group_by(date, item, per) |> 
+            summarise(availability = sum(availability),
+                      order = sum(order)) |> 
+            ungroup() |> 
+            mutate(oa_percent = ifelse((is.na(availability)| availability==0) & order > 0, 1,
+                                       ifelse((is.na(availability)| availability==0) , 0, order / availability))
+            ) |>  
+            select(date, item, per, value = oa_percent) 
+          
+        } else {
+          return()
+        }
+        
+        if (input$chart_type == "bar") {
+          ts <- ts_init |> 
+            filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) |> 
+            ggplot(aes(x=date, y=value)) +
+            geom_col(color = c('seagreen')) +
+            facet_grid(item + per~.) +
+            ylab(input$mparameter)
+        } else {
+          ts <- ts_init |> 
+            filter(item %in% input$item & date >= format(input$daterange[1]) & date <= format(input$daterange[2])) |> 
+            ggplot(aes(x=date, y=value)) +
+            geom_point(color = c('seagreen')) +
+            geom_line(color = c('seagreen')) +
+            facet_grid(item + per~.) +
+            ylab(input$mparameter)
+        }
+
+        if (input$mparameter == 'Ordered / Available') {
+          ts <- ts +
+            scale_y_continuous(labels = scales::percent_format(scale = 100))
+        }
+      }
+
       return(ts)
     }
   })
@@ -478,9 +564,43 @@ server <- function(input, output, session) {
   
   
   ##############  Produce Item Search tab  ############## 
+  
+  item_button_df = reactiveValues(data = milc %>%
+                                    filter(item %in% ex_item))
+  item_button_df_fp = reactiveValues(data = fp %>%
+                                       filter(item %in% ex_item))
+  item_button_df_so = reactiveValues(data = so %>%
+                                       filter(item %in% ex_item))
+  item_button_df_wsl = reactiveValues(data = wsl %>%
+                                        filter(item %in% ex_item))
+  
+  # Only update tables if button pressed
+  observeEvent(input$update_it, {
+    if (is.null(input$mitem)) { #only update data frame if item filter is not blank
+      item_button_df$data = milc %>%
+        filter(item %in% "ahksdaobohafb") #using gibberish so that no data is returned
+      item_button_df_fp$data = fp %>%
+        filter(item %in% "ahksdaobohafb") #using gibberish so that no data is returned
+      item_button_df_so$data = so %>%
+        filter(item %in% "ahksdaobohafb") #using gibberish so that no data is returned
+      item_button_df_wsl$data = wsl %>%
+        filter(item %in% "ahksdaobohafb") #using gibberish so that no data is returned
+    } else {
+      item_button_df$data = milc %>%
+        filter(item %in% input$mitem)
+      item_button_df_fp$data = fp %>%
+        filter(item %in% input$mitem)
+      item_button_df_so$data = so %>%
+        filter(item %in% input$mitem)
+      item_button_df_wsl$data = wsl %>%
+        filter(item %in% input$mitem)
+    }
+    
+  })
+  
+  
   output$infotable <- renderTable({
-    milc %>% 
-      filter(item %in% input$mitem) %>% 
+    item_button_df$data %>% 
       select(item, category, per = preferred_per_value, Note = farmer_dashboard_notes) %>% 
       mutate(n = row_number(),
              Note = ifelse(is.na(Note), 'FILL ME IN PLEASE!!!', Note)) %>%
@@ -504,27 +624,24 @@ server <- function(input, output, session) {
   }) 
   
   output$costtable <- renderTable({
-    fp %>% 
+    item_button_df_fp$data %>% 
       mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
       filter(!is.na(availability) & !is.na(cost)) %>% 
-      filter(item %in% input$mitem) %>% 
       group_by(item, cost) %>% 
       summarise(count = n()) %>% 
       arrange(item, desc(cost)) %>% 
       ungroup() %>% 
-      left_join(fp %>% 
+      left_join(item_button_df_fp$data %>% 
                   mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
-                  filter(item %in% input$mitem) %>% 
                   filter(!is.na(availability) & !is.na(cost)) %>% 
                   group_by(item) %>% 
                   summarise(ttl_count = n()) %>% 
                   ungroup()
                 , by = c('item')
       ) %>% 
-      left_join(fp %>% 
+      left_join(item_button_df_fp$data %>% 
                   mutate(availability = ifelse(is.na(av_max), av_min, av_max)) %>%
                   filter(!is.na(availability) & !is.na(cost)) %>% 
-                  filter(item %in% input$mitem) %>% 
                   group_by(item) %>% 
                   summarise(max_cost = max(cost)) %>% 
                   ungroup()
@@ -540,19 +657,17 @@ server <- function(input, output, session) {
   })
   
   output$farmigotable <- renderDataTable({
-    dt <- milc %>% 
-      filter(item %in% input$mitem) %>%
+    dt <- item_button_df$data %>% 
       select(item) %>% 
       distinct() %>% 
-      full_join(sr %>% #obtain full week list
+      cross_join(sr %>% #obtain full week list
                   filter(date <= fp_max & group_id != "skip") %>% 
                   select(season_week) %>% 
                   distinct()
-                , by = character()
+                #, by = character()
       ) %>% 
-      left_join(so %>%  
+      left_join(item_button_df_so$data %>%  
                   filter(sold != '') %>% 
-                  filter(item %in% input$mitem) %>%
                   select(season_week, item, sold) %>% 
                   distinct()
                 , by = c('season_week','item')
@@ -597,28 +712,25 @@ server <- function(input, output, session) {
       filter(!is.na(group_id)) %>% 
       select(group_id) %>% 
       distinct() %>%
-      left_join(milc %>% #join in the items that have been in shares to associated groups
-                  filter(item %in% input$mitem) %>%
+      left_join(item_button_df$data %>% #join in the items that have been in shares to associated groups
                   select(item) %>% 
                   distinct() %>% 
-                  inner_join(wsl %>%  
+                  inner_join(item_button_df_wsl$data %>%  
                                filter(!is.na(item) & !is.na(amt_share) & !is.na(prcnt_amnt)) %>% 
-                               filter(item %in% input$mitem) %>% 
                                select(item, group_id) %>% 
                                distinct()
                              , by = c('item')
                              )
                 , by = c('group_id')
                 ) %>% 
-      full_join(sr %>% #obtain full week list
+      cross_join(sr %>% #obtain full week list
                   filter(date <= fp_max & group_id != "skip") %>% 
                   select(season_week) %>% 
                   distinct()
-                , by = character()
+                #, by = character()
       ) %>% 
-      left_join(wsl %>%  #bring in member information
+      left_join(item_button_df_wsl$data %>%  #bring in member information
                   filter(!is.na(item) & !is.na(amt_share) & !is.na(prcnt_amnt)) %>% 
-                  filter(item %in% input$mitem) %>%
                   left_join(sn %>% 
                               group_by(season_week, group_id) %>% 
                               summarise(members = sum(members)) %>% 
