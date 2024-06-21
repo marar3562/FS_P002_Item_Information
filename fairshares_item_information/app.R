@@ -7,7 +7,7 @@ library(DT)
 library(scales)
 library(bslib)
 library(thematic)
-library(showtext)
+library(showtext) 
 library(shinyBS)
 library(lubridate)
 
@@ -33,7 +33,7 @@ mil = range_read(sheet_id
 #Share Rotation tab
 sr = range_read(sheet_id
                 ,sheet = 'share_rotation'
-                ,col_types = 'Diciccc'
+                ,col_types = 'Dicicncc'
 )
 
 #Weekly Share Lists tab
