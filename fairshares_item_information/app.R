@@ -21,7 +21,7 @@ gs4_auth(cache = ".secrets", email = TRUE, use_oob = TRUE) #use in shinyapps pro
 sheet_id = "1xs8TAMrSsJuL_gou4y0DBH3IkaTH0eBn_pdboCGWFTI"
 fp = range_read(sheet_id
                 ,sheet = 'farm_produce'
-                ,col_types = 'icccnnnnncDcDc'
+                ,col_types = 'icccnnnnnncDcDc'
 )
 
 #Master Item List tab
@@ -69,7 +69,7 @@ sl = range_read(sheet_id
 #Farmer List tab
 fl = range_read(sheet_id
                 ,sheet = 'farmer_list'
-                ,col_types = 'ccccccDc'
+                ,col_types = 'cccccccDc'
 )
 
 ########## Delorean ##########
