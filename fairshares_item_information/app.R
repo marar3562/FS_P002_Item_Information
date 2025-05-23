@@ -14,7 +14,7 @@ library(lubridate)
 # gs4_auth(cache = ".secrets") #used to achieve the secrets file
 
 gs4_auth(cache = ".secrets", email = TRUE, use_oob = TRUE) #use in shinyapps prod to connect to data
-#gs4_auth(email = "")
+# gs4_auth(email = "")
 
 ##C3P0 Archive File
 #Farmer Produce tab
