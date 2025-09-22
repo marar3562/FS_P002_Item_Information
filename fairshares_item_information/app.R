@@ -4,7 +4,7 @@
 library(googlesheets4)
 library(tidyverse)
 library(DT)
-library(scales)
+library(scales) 
 library(bslib)
 library(thematic)
 library(showtext) 
