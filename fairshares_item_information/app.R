@@ -159,7 +159,7 @@ mitem_list = milc %>%
 matrix_parameter = c('Available','Ordered','Ordered / Available')
 
 # setting an example item field for the Item Detail tab
-ex_item = 'Broccoli'
+ex_item = 'Kale - Green Curly'
 
 ##Theme Setup
 # Setting Theme (https://shiny.rstudio.com/app-stories/weather-lookup-bslib.html)
@@ -179,7 +179,8 @@ ui <- fluidPage(
                column(3, radioButtons("current_theme", "App Theme:", c("Dark" = "slate", "Light" = "flatly"), inline = TRUE)
                       ),
                column(3, bsButton("showpanel", "Show/hide sidebar", type = "toggle", value = TRUE, size = "small")
-                      )
+                      ),
+               column(3, tags$a(href="https://github.com/marar3562/FS_P002_Item_Information", "Click to see Github repo"))
       )
   ),
   div(
@@ -192,12 +193,12 @@ ui <- fluidPage(
   ),
   
   tabsetPanel(
-    tabPanel("Farmer Produce - Availability",
-             uiOutput('ui')
-    ),
     tabPanel("Produce Item Search",
              uiOutput('ui2')
-
+             
+    ),
+    tabPanel("Farmer Produce - Availability",
+             uiOutput('ui')
     )
   )
   
@@ -689,7 +690,7 @@ server <- function(input, output, session) {
                      , class = 'cell-border stripe'          #add lines between rows/columns
                      , caption = htmltools::tags$caption(
                        style = 'caption-side: top; text-align: left;'
-                       ,'Farmigo Sales'
+                       ,'Farmigo Sales (sold / available)'
                      )
                      , options = list(dom = 't'
                                       , pageLength = 1000)
