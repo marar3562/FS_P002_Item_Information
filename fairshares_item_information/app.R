@@ -7,18 +7,19 @@ library(DT)
 library(scales) 
 library(bslib)
 library(thematic)
-library(showtext) 
+library(showtext)
 library(shinyBS)
 library(lubridate)
 
-# gs4_auth(cache = ".secrets") #used to achieve the secrets file
+# gs4_auth(email = "", cache = ".secrets") #used to achieve the secrets file
 
 gs4_auth(cache = ".secrets", email = TRUE, use_oob = TRUE) #use in shinyapps prod to connect to data
 # gs4_auth(email = "")
 
 ##C3P0 Archive File
 #Farmer Produce tab
-sheet_id = "1xs8TAMrSsJuL_gou4y0DBH3IkaTH0eBn_pdboCGWFTI"
+# sheet_id = "1xs8TAMrSsJuL_gou4y0DBH3IkaTH0eBn_pdboCGWFTI" #original source
+sheet_id = "1l-K0Ws5GYGcgsJssUNzhPXtoGg_EuoXHUTPcC1MT35Y" #personal
 fp = range_read(sheet_id
                 ,sheet = 'farm_produce'
                 ,col_types = 'icccnnnnnncDcDc'
