@@ -18,8 +18,8 @@ gs4_auth(cache = ".secrets", email = TRUE, use_oob = TRUE) #use in shinyapps pro
 
 ##C3P0 Archive File
 #Farmer Produce tab
-# sheet_id = "1xs8TAMrSsJuL_gou4y0DBH3IkaTH0eBn_pdboCGWFTI" #original source
-sheet_id = "1l-K0Ws5GYGcgsJssUNzhPXtoGg_EuoXHUTPcC1MT35Y" #personal
+sheet_id = "1xs8TAMrSsJuL_gou4y0DBH3IkaTH0eBn_pdboCGWFTI" #original source
+# sheet_id = "1l-K0Ws5GYGcgsJssUNzhPXtoGg_EuoXHUTPcC1MT35Y" #personal
 fp = range_read(sheet_id
                 ,sheet = 'farm_produce'
                 ,col_types = 'icccnnnnnncDcDc'
